@@ -1,0 +1,27 @@
+[project]
+name = "yacfks"
+version = "0.1.0"
+description = "yet another calculator for kingshot ('cause you cant have too many). actually it's more of a simulator"
+authors = [
+    {name = "memelord"}
+]
+readme = "README.md"
+requires-python = "<4.0,>3.12"
+dependencies = [
+    "nicegui (>=3.12.1,<4.0.0)",
+    "sqlmodel (>=0.0.38,<0.0.39)"
+]
+
+
+[tool.poetry.scripts]
+test = "yacfks.app.main:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.3,<10.0.0)",
+    "ruff (>=0.15.15,<0.16.0)"
+]
