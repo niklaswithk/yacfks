@@ -12,6 +12,12 @@ class ArmyLine:
     def troop_count(self) -> int:
         return sum(stack.count for stack in self.troop_stacks)
 
+    # a simple check to see if there are any troops left or they all dead :)
+    # if troop count is greater than 0, this function returns TRUE, else FALSE
+    @property
+    def is_alive(self) -> bool:
+        return self.troop_count > 0
+
     # after an army line is init:d, ensure its troop stacks are all of the same type as itself.
     def __post_init__(self):
         for stack in self.troop_stacks:
@@ -45,6 +51,11 @@ class Army:
     @property
     def archer_count(self) -> int:
         return self.archer_line.troop_count
+
+    # put an alive check for whole army too, will prob be useful :)
+    @property
+    def is_alive(self) -> bool:
+        return self.total_troop_count > 0
 
     # after an army is init:d, ensure its lines are of the correct troop types.
     def __post_init__(self):
