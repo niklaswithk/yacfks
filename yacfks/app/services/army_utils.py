@@ -91,8 +91,8 @@ def aggregate_base_stats(line: ArmyLine) -> EffectiveBaseStats:
     # effective_health = round(effective_health, 6)
 
     return EffectiveBaseStats(
-        base_attack = effective_attack,
-        base_lethality = 10.0,
-        base_health = effective_health,
-        base_defense = 10.0
+        attack = effective_attack,
+        lethality = 10.0,
+        health = effective_health,
+        defense = 10.0
         )

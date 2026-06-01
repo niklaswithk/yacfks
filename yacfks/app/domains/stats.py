@@ -2,10 +2,17 @@ from dataclasses import dataclass
 
 @dataclass
 class EffectiveBaseStats:
-    base_attack: float
-    base_lethality: float
-    base_health: float
-    base_defense: float
+    attack: float
+    lethality: float
+    health: float
+    defense: float
+
+@dataclass
+class RawStatsBonuses:
+    attack: float
+    lethality: float
+    health: float
+    defense: float
 
 @dataclass
 class EffectiveStatsBonuses:

@@ -1,7 +1,7 @@
 from yacfks.app.domains.army import Army, ArmyLine
 from yacfks.app.domains.troop import TroopStack, TroopDefinition
 from yacfks.app.domains.enums import TroopType
-from yacfks.app.battle.army_utils import normalize_army_line, aggregate_base_stats
+from yacfks.app.services.army_utils import normalize_army_line, aggregate_base_stats
 import math
 
 TROOPS = {
@@ -41,7 +41,7 @@ def main():
 
     troop_factor = math.sqrt(11000 * 5000)
 
-    offensive_factor = (aggregated_stats.base_attack * aggregated_stats.base_lethality / 100)
+    offensive_factor = (aggregated_stats.attack * aggregated_stats.lethality / 100)
     bear_defensive_factor = (83.333 * 10 / 100)
     bear_dmg_per_turn = troop_factor * offensive_factor / bear_defensive_factor / 100
     print(aggregated_stats)

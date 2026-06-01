@@ -1,7 +1,7 @@
 import math
 import pytest
 
-from yacfks.app.calculations.formulas import (
+from yacfks.app.services.formulas import (
     army_size,
     get_army_min,
     troop_factor,

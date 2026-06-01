@@ -2,7 +2,7 @@ import pytest
 from yacfks.app.domains.army import ArmyLine
 from yacfks.app.domains.troop import TroopDefinition, TroopStack
 from yacfks.app.domains.enums import TroopType
-from yacfks.app.battle.army_utils import normalize_army_line, aggregate_base_stats
+from yacfks.app.services.army_utils import normalize_army_line, aggregate_base_stats
 from yacfks.tests.helpers import make_troop_definition
 
 # test so that an Army line containging several infantry stacks of different Tiers normalize correctly.
@@ -135,10 +135,10 @@ def test_agg_base_stats_simple():
 
     # we use pytest.approx, since we still deal with floats, and they can get messy with extrreme precisions
     # for example, the effetive base attack might be for example 100.00000000000004 and not exaclty 100.
-    assert agg_stats.base_attack == pytest.approx(100)
-    assert agg_stats.base_health == pytest.approx(200)
-    assert agg_stats.base_lethality == pytest.approx(10)
-    assert agg_stats.base_defense == pytest.approx(10)
+    assert agg_stats.attack == pytest.approx(100)
+    assert agg_stats.health == pytest.approx(200)
+    assert agg_stats.lethality == pytest.approx(10)
+    assert agg_stats.defense == pytest.approx(10)
 
 # now for some real tests, with real base stats and mixing tiers.
 def test_agg_base_stats_multiple_tiers():
@@ -178,15 +178,15 @@ def test_agg_base_stats_multiple_tiers():
     # proportion of the total attack/health contributions that each tier provides.
 
     # the combined base stats should in this case be higher than the T5 inf, but lower than the T6 inf.
-    assert 206 < agg_stats.base_attack < 243
-    assert 619 < agg_stats.base_health < 730
+    assert 206 < agg_stats.attack < 243
+    assert 619 < agg_stats.health < 730
 
     # make sure the combined attack and health are as expected.
     # base lehtality and def is always 10.
-    assert agg_stats.base_attack == pytest.approx(226.93800)
-    assert agg_stats.base_health == pytest.approx(681.81063)
-    assert agg_stats.base_lethality == pytest.approx(10)
-    assert agg_stats.base_defense == pytest.approx(10)
+    assert agg_stats.attack == pytest.approx(226.93800)
+    assert agg_stats.health == pytest.approx(681.81063)
+    assert agg_stats.lethality == pytest.approx(10)
+    assert agg_stats.defense == pytest.approx(10)
 
 # test to send an empty armyline into the aggreagte func, should raise an error
 def test_agg_empty_army_line():
