@@ -1,31 +1,33 @@
 import pytest
 from yacfks.app.domains.army import Army, ArmyLine
-from yacfks.app.domains.troop import TroopDefinition, TroopStack
+from yacfks.app.domains.troop import TroopStack
 from yacfks.app.domains.enums import TroopType
+from yacfks.tests.helpers import make_troop_definition
 
 # try create an armyLine with stacks of different troop types - must raise an error since this is not allowed.
 def test_army_line_rejects_mixed_troop_types():
-    inf_stack = TroopStack(definition=TroopDefinition(
-        troop_type=TroopType.INF,
-        tier_major=6,
-        tier_minor=0,
-        base_attack=243,
-        base_lethality=10,
-        base_health=730,
-        base_defense=10,
-        skills=[]
+    inf_stack = TroopStack(
+        definition=make_troop_definition(
+            troop_type=TroopType.INF,
+            attack=243,
+            health=730
     ), count=5000)
 
-    cav_stack = TroopStack(definition=TroopDefinition(
-        troop_type=TroopType.CAV,
-        tier_major=6,
-        tier_minor=0,
-        base_attack=730,
-        base_lethality=10,
-        base_health=243,
-        base_defense=10,
-        skills=[]
+    cav_stack = TroopStack(
+        definition=make_troop_definition(
+            troop_type=TroopType.CAV,
+            attack=730,
+            health=243
     ), count=5000)
+
+    with pytest.raises(ValueError):
+        ArmyLine(
+            troop_type=TroopType.INF,
+            troop_stacks=[
+                inf_stack,
+                cav_stack
+            ]
+        )
 
     with pytest.raises(ValueError):
         ArmyLine(

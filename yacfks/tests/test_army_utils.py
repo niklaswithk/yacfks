@@ -3,6 +3,7 @@ from yacfks.app.domains.army import ArmyLine
 from yacfks.app.domains.troop import TroopDefinition, TroopStack
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.battle.army_utils import normalize_army_line, aggregate_base_stats
+from yacfks.tests.helpers import make_troop_definition
 
 # test so that an Army line containging several infantry stacks of different Tiers normalize correctly.
 def test_norm_army_lines_merges_same_tier():
@@ -14,43 +15,30 @@ def test_norm_army_lines_merges_same_tier():
         troop_stacks=[
             # 1 stackk of 6000 T6 inf
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
-                    tier_major=6,
-                    tier_minor=0,
-                    base_attack=243,
-                    base_lethality=10,
-                    base_health=730,
-                    base_defense=10,
-                    skills=[]
+                    attack=243,
+                    health=730
                 ),
                 count=6000
             ),
             # 1 stack of 1000 T6 inf
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
-                    tier_major=6,
-                    tier_minor=0,
-                    base_attack=243,
-                    base_lethality=10,
-                    base_health=730,
-                    base_defense=10,
-                    skills=[]
+                    attack=243,
+                    health=730
                 ),
                 count=1000
             ),
             # 1 stack of 500 T5 inf
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
                     tier_major=5,
                     tier_minor=0,
-                    base_attack=206,
-                    base_lethality=10,
-                    base_health=619,
-                    base_defense=10,
-                    skills=[]
+                    attack=206,
+                    health=619
                 ),
                 count=500
             )
@@ -84,30 +72,20 @@ def test_norm_army_lines_doesnt_merge_diff_tiers():
         troop_stacks=[
             # 1 stackk of 1000 T6 inf
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
-                    tier_major=6,
-                    tier_minor=0,
-                    base_attack=243,
-                    base_lethality=10,
-                    base_health=730,
-                    base_defense=10,
-                    skills=[]
-                ),
+                    attack=243,
+                    health=730),
                 count=1000
             ),
             # 1 stack of 1500 T5 inf
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
                     tier_major=5,
                     tier_minor=0,
-                    base_attack=206,
-                    base_lethality=10,
-                    base_health=619,
-                    base_defense=10,
-                    skills=[]
-                ),
+                    attack=206,
+                    health=619),
                 count=1500
             )
         ]
@@ -136,15 +114,12 @@ def test_agg_base_stats_simple():
         troop_type=TroopType.INF,
         troop_stacks=[
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
                     tier_major=6,
                     tier_minor=0,
-                    base_attack=100,
-                    base_lethality=10,
-                    base_health=200,
-                    base_defense=10,
-                    skills=[]
+                    attack=100,
+                    health=200
                 ),
                 count=1000
             )
@@ -173,29 +148,23 @@ def test_agg_base_stats_multiple_tiers():
         troop_stacks=[
             # 1 stack of T6 inf, 6000 troops
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
                     tier_major=6,
                     tier_minor=0,
-                    base_attack=243,
-                    base_lethality=10,
-                    base_health=730,
-                    base_defense=10,
-                    skills=[]
+                    attack=243,
+                    health=730
                 ),
                 count=6000
             ),
             # 1 stack of T5 inf, 5000 troops.
             TroopStack(
-                definition=TroopDefinition(
+                definition=make_troop_definition(
                     troop_type=TroopType.INF,
                     tier_major=5,
                     tier_minor=0,
-                    base_attack=206,
-                    base_lethality=10,
-                    base_health=619,
-                    base_defense=10,
-                    skills=[]
+                    attack=206,
+                    health=619
                 ),
                 count=5000
             )
