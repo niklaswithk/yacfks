@@ -1,4 +1,5 @@
-from yacfks.app.domains.army import ArmyLine, TroopStack
+from yacfks.app.domains.army import ArmyLine
+from yacfks.app.domains.troop import TroopStack
 from yacfks.app.domains.stats import EffectiveBaseStats
 from collections import defaultdict
 import math
