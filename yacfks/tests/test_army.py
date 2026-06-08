@@ -22,7 +22,7 @@ def test_army_line_rejects_mixed_troop_types():
 
     # Infatry line cant contain cav, so we expect an error
     with pytest.raises(ValueError):
-        ArmyLine(
+        ArmyLine.from_stacks(
             troop_type=TroopType.INF,
             troop_stacks=[
                 inf_stack,
@@ -32,7 +32,7 @@ def test_army_line_rejects_mixed_troop_types():
 
     # arhcer line cant contain cav or inf, so we expect an error
     with pytest.raises(ValueError):
-        ArmyLine(
+        ArmyLine.from_stacks(
             troop_type=TroopType.ARCH,
             troop_stacks=[
                 inf_stack,
@@ -42,7 +42,7 @@ def test_army_line_rejects_mixed_troop_types():
 
 # try to create an Amry with wrong troop types in some ARmyLines - must raise an error since this is not allowed.
 def test_army_rejects_mixed_line_types():
-    cav_line = ArmyLine(
+    cav_line = ArmyLine.from_stacks(
         troop_type=TroopType.CAV,
         troop_stacks=[]
     )
@@ -53,7 +53,7 @@ def test_army_rejects_mixed_line_types():
         Army(
             infantry_line=cav_line,
             cavalry_line=cav_line,
-            archer_line=ArmyLine(
+            archer_line=ArmyLine.from_stacks(
                 troop_type=TroopType.ARCH,
                 troop_stacks=[]
             )
@@ -61,7 +61,7 @@ def test_army_rejects_mixed_line_types():
 
 # more explicit army test for mixed lines - inf line contains wrong troop type.
 def test_army_rejects_wrong_infantry_line():
-    cav_line = ArmyLine(
+    cav_line = ArmyLine.from_stacks(
         troop_type=TroopType.CAV,
         troop_stacks=[]
     )
@@ -69,11 +69,11 @@ def test_army_rejects_wrong_infantry_line():
     with pytest.raises(ValueError):
         Army(
             infantry_line=cav_line,
-            cavalry_line=ArmyLine(
+            cavalry_line=ArmyLine.from_stacks(
                 troop_type=TroopType.CAV,
                 troop_stacks=[]
             ),
-            archer_line=ArmyLine(
+            archer_line=ArmyLine.from_stacks(
                 troop_type=TroopType.ARCH,
                 troop_stacks=[]
             )
@@ -81,19 +81,19 @@ def test_army_rejects_wrong_infantry_line():
 
 # more explicit army test for mixed lines - cav line contains wrong troop type.
 def test_army_rejects_wrong_cavalry_line():
-    inf_line = ArmyLine(
+    inf_line = ArmyLine.from_stacks(
         troop_type=TroopType.INF,
         troop_stacks=[]
     )
 
     with pytest.raises(ValueError):
         Army(
-            infantry_line=ArmyLine(
+            infantry_line=ArmyLine.from_stacks(
                 troop_type=TroopType.INF,
                 troop_stacks=[]
             ),
             cavalry_line=inf_line,
-            archer_line=ArmyLine(
+            archer_line=ArmyLine.from_stacks(
                 troop_type=TroopType.ARCH,
                 troop_stacks=[]
             )
@@ -101,18 +101,18 @@ def test_army_rejects_wrong_cavalry_line():
 
 # more explicit army test for mixed lines - archer line contains wrong troop type.
 def test_army_rejects_wrong_archer_line():
-    inf_line = ArmyLine(
+    inf_line = ArmyLine.from_stacks(
         troop_type=TroopType.INF,
         troop_stacks=[]
     )
 
     with pytest.raises(ValueError):
         Army(
-            infantry_line=ArmyLine(
+            infantry_line=ArmyLine.from_stacks(
                 troop_type=TroopType.INF,
                 troop_stacks=[]
             ),
-            cavalry_line=ArmyLine(
+            cavalry_line=ArmyLine.from_stacks(
                 troop_type=TroopType.CAV,
                 troop_stacks=[]
             ),
@@ -137,7 +137,7 @@ def test_army_line_accepts_correct_line_types():
             health=619
     ), count=500)
 
-    line = ArmyLine(
+    line = ArmyLine.from_stacks(
         troop_type=TroopType.INF,
         troop_stacks=[
             inf_stack1,
@@ -150,18 +150,77 @@ def test_army_line_accepts_correct_line_types():
 
 def test_army_accepts_correct_line_types():
     army = Army(
-        infantry_line=ArmyLine(
+        infantry_line=ArmyLine.from_stacks(
             troop_type=TroopType.INF,
-            troop_stacks=[],
+            troop_stacks=[
+                TroopStack(
+                    definition=make_troop_definition(
+                        troop_type=TroopType.INF,
+                        attack=234,
+                        health=123
+                    ), count=1000
+                )
+            ],
         ),
-        cavalry_line=ArmyLine(
+        cavalry_line=ArmyLine.from_stacks(
             troop_type=TroopType.CAV,
             troop_stacks=[],
         ),
-        archer_line=ArmyLine(
+        archer_line=ArmyLine.from_stacks(
             troop_type=TroopType.ARCH,
             troop_stacks=[],
         ),
     )
 
     assert army.infantry_line.troop_type == TroopType.INF
+    assert army.cavalry_line.troop_type == TroopType.CAV
+    assert army.archer_line.troop_type == TroopType.ARCH
+
+def test_create_army_with_just_archers():
+    # we always need/set all army lines/troop types, but ArmyLines are allowed to have empy TroopStacks
+    army = Army(
+        infantry_line=ArmyLine.from_stacks(
+            troop_type=TroopType.INF,
+            troop_stacks=[]
+        ),
+        cavalry_line=ArmyLine.from_stacks(
+            troop_type=TroopType.CAV,
+            troop_stacks=[]
+        ),
+        archer_line=ArmyLine.from_stacks(
+            troop_type=TroopType.ARCH,
+            troop_stacks=[
+                TroopStack(
+                    definition=make_troop_definition(
+                        troop_type=TroopType.ARCH,
+                        attack=234,
+                        health=123
+                    ), count=1000
+                )
+            ]
+        )
+    )
+
+    assert army.total_troop_count == 1000
+    assert army.infantry_count == 0
+    assert army.cavalry_count == 0
+    assert army.archer_count == 1000
+
+def test_create_empty_army_must_fail():
+    # an armyLine can be empty, but not all.
+    # i.e. you cant send an empty army to battle :)
+    with pytest.raises(ValueError):
+        Army(
+            infantry_line=ArmyLine.from_stacks(
+                troop_type=TroopType.INF,
+                troop_stacks=[]
+            ),
+            cavalry_line=ArmyLine.from_stacks(
+                troop_type=TroopType.CAV,
+                troop_stacks=[]
+            ),
+            archer_line=ArmyLine.from_stacks(
+                troop_type=TroopType.ARCH,
+                troop_stacks=[]
+            )
+        )
