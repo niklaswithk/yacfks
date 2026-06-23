@@ -5,15 +5,6 @@ class TroopType(Enum):
     CAV = "cavalry"
     ARCH = "archers"
 
-class HeroSkillOpType(Enum):
-    DMGUP = "DamageUp"
-    DEFUP = "DefenseUp"
-    OPPDEFDOWN = "OppDefenseDown"
-    OPPDMGDOWN = "OppDamageDown"
-    
-
-class TroopSkillOpType(Enum):
-    TROOPDMGUP = "TroopDamageUp"
 
 class BattleMode(Enum):
     PVP = "pvp"
@@ -38,3 +29,4 @@ class WidgetMode(Enum):
 class StatsInputMode(Enum):
     SOLO_REPORT = "solo"
     RALLY_REPORT = "rally"
+

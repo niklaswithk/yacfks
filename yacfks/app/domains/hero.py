@@ -1,6 +1,10 @@
-from dataclasses import dataclass
+from __future__ import annotations
+from dataclasses import dataclass, field
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.domains.widget import WidgetDefinition
+from yacfks.app.battle.skills.enums import TriggerType
+from yacfks.app.battle.skills.definitions import SkillEffect, ActivationRule, SkillLevelData
+from yacfks.app.battle.skills.conditions import SkillCondition
 
 # basci represnation of what a Hero is in database:)
 # skills will be added later
@@ -17,15 +21,24 @@ class HeroDefinition:
 # a represenation of Hero selection in UI.
 @dataclass
 class HeroSelection:
-    # see above
     hero: HeroDefinition
-
-    # the widget level set in the UI
-    # this value is used to get the effect/boost from a certain widget level, which we store in data in widget repo.
     widget_level: int = 0
-    #skills come later, someting like this (llooks like Daryls sim does this, judging by local storage in browser):
-    # skill_levels={
-    #     1: 5,
-    #     2: 3,
-    #     3: 5
-    # }
+    skills: list["HeroSkillSelection"] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class HeroSkillDefinition:
+    id: int
+    name: str
+
+    activation: ActivationRule
+    trigger: TriggerType
+    effects: list[SkillEffect]
+    conditions: list[SkillCondition]
+    level_data: dict[int, SkillLevelData] = None  # level → values per effect_op
+
+
+@dataclass
+class HeroSkillSelection:
+    definition: HeroSkillDefinition
+    level: int

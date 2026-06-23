@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 from yacfks.app.domains.troop import TroopStack
 from yacfks.app.domains.enums import TroopType
+from yacfks.app.domains.troop import TroopSkill
 from yacfks.app.domains.stats import EffectiveBaseStats
 import math
 
@@ -23,6 +24,22 @@ class ArmyLine:
     @property
     def is_alive(self) -> bool:
         return self.troop_count > 0
+    
+    @property
+    def troop_skills(self) -> list[TroopSkill]:
+        skills: dict[int, TroopSkill] = {}
+
+        #loop all troop stacks in ArmyLine, and for each skill add the SkillDef to skills dict aboceve, 
+        # going by skill id. This way we don't get duplicate skills, if one skill appears more than once
+        # it will simply replace other instances of it in the dict, so the skills dict will always contain discint troop skills
+        # so if an ArmyLine has e-g. T6 inf and T7 inf stacks, then three skills would be present, but only 2 skill would be unique/distinct
+        # since the T7 inf has 1 skill that's same as T6 inf, so the skills dict will only contain 2 troop skills not 3
+        for stack in self.troop_stacks:
+            for skill in stack.definition.skills:
+                skills[skill.id] = skill
+        
+        return list(skills.values())
+
 
     # after an army line is init:d, ensure its troop stacks are all of the same type as itself.
     def __post_init__(self):
@@ -173,6 +190,15 @@ class Army:
     @property
     def is_alive(self) -> bool:
         return self.total_troop_count > 0
+
+    def get_line(self, troop_type: TroopType) -> "ArmyLine":
+        if troop_type == TroopType.INF:
+            return self.infantry_line
+        if troop_type == TroopType.CAV:
+            return self.cavalry_line
+        if troop_type == TroopType.ARCH:
+            return self.archer_line
+        raise ValueError(f"Unknown troop type: {troop_type}")
 
     # after an army is init:d, ensure its lines are of the correct troop types.
     def __post_init__(self):

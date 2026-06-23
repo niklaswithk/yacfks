@@ -2,15 +2,13 @@ from dataclasses import dataclass
 from yacfks.app.domains.army import Army
 from yacfks.app.domains.army_config import ArmyConfiguration
 from yacfks.app.domains.stats import (
-    EffectiveBaseStats,
     EffectiveFinalStats,
     ArmyBonuses,
     ArmyBaseStats,
     ArmyFinalStats,
-    EffectiveStatsBonuses,
     )
 from yacfks.app.services.bonus_resolver import BonusResolver
-from yacfks.app.domains.hero import HeroDefinition, HeroSelection
+from yacfks.app.domains.hero import HeroSelection
 
 @dataclass
 class BattleContext:

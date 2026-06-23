@@ -1,14 +1,10 @@
-from dataclasses import dataclass
-from yacfks.app.domains.army import Army, ArmyLine
-from yacfks.app.domains.troop import TroopStack, TroopDefinition
-from yacfks.app.domains.enums import TroopType
-from yacfks.app.services.army_utils import normalize_army_line, aggregate_base_stats
-import math
+from dataclasses import dataclass, field
+from yacfks.app.battle.skills.statuses import ActiveStatus
 
 @dataclass
 class BattleLineState:
-    army_line: ArmyLine
     troop_count: int
+    statuses: list[ActiveStatus] = field(default_factory=list)
     pending_losses: int = 0
 
     @property

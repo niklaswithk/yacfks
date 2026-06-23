@@ -1,6 +1,9 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from yacfks.app.domains.enums import TroopType
-from yacfks.app.domains.skills import Skill
+from yacfks.app.battle.skills.enums import TriggerType
+from yacfks.app.battle.skills.definitions import SkillEffect, ActivationRule, SkillLevelData
+from yacfks.app.battle.skills.conditions import SkillCondition
 
 @dataclass
 class TroopDefinition:
@@ -14,9 +17,21 @@ class TroopDefinition:
     base_defense: float
     
     # troop skills are shared, so say you have lots of T6 and only 1 T7, the whole ArmyLine of that troop type gets the T7 skill.
-    skills: list[Skill]
+    skills: list[TroopSkill]
 
 @dataclass
 class TroopStack:
     definition: TroopDefinition
     count: int
+
+
+@dataclass(frozen=True)
+class TroopSkill:
+    id: int
+    name: str
+
+    activation: ActivationRule
+    trigger: TriggerType
+    effects: list[SkillEffect]
+    conditions: list[SkillCondition]
+    level_data: dict[int, SkillLevelData] = None  # level → values per effect_op
