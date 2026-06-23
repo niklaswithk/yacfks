@@ -34,4 +34,4 @@ class TroopSkill:
     trigger: TriggerType
     effects: list[SkillEffect]
     conditions: list[SkillCondition]
-    level_data: dict[int, SkillLevelData] = None  # level → values per effect_op
+    level_data: dict[int, SkillLevelData] | None = None  # level → values per effect_op
