@@ -59,12 +59,17 @@ Instead, a skill produces one or more effects.
 Examples:
 
 ```text
+Known SkillMod effects:
 DamageUp
 DefenseUp
 OppDefenseDown
 OppDamageDown
+
+THEORIZED troop skill effects:
 TroopDamageUp
 TroopDefenseUp
+
+Special skill effects for handling stateful logic, modifying targeting mechanics etc:
 Retarget
 ApplyStatus
 ```
@@ -134,9 +139,8 @@ Statuses:
 
 * Have duration
 * Can expire
-* Can refresh
-* Can stack
-* Can be unique
+* May refresh
+* May stack
 
 Statuses may themselves generate effects while active.
 
@@ -161,16 +165,15 @@ Instead:
 
 Turn N:
 
-* Skill triggers
-* RNG succeeds
-* Target is selected
-* Cursed status is applied
+* RNG succeeds, skill triggers
+* Target troop type at opposing side is selected
+* Cursed status is applied on that target, like queued up.
 
 Turn N+1:
 
-* Cursed status is active
-* Status contributes effects
-* Effects enter SkillMod calculation
+* Cursed status is active on opp. target troop type, set during previous turn.
+* The status contributes effects
+* Effects enter SkillMod calculation when attacks are made upon that specific opposing troop type target.
 
 Thus:
 
@@ -215,38 +218,29 @@ Examples:
 ```python
 ALWAYS
 TURN_START
-TURN_END
 PHASE_START
-PHASE_END
 ATTACK
 ```
 
-The trigger determines when the skill is evaluated.
+The trigger type determines when during a battle turn the skill is evaluated - e.g. some skills are always active from start, some are rolled per attack phase, etc.
 
 ---
 
 # Activation Rules
 
-A trigger does not imply success.
-
-After triggering:
-
+Once a skill is evaluated according to trigger  type, 
 ActivationRule determines whether the skill activates.
+Like is a skill RNG or not.
 
-Examples:
+NOTE:  
+THis is somehwat confusing, the idea was to handle RNG and non-RNG the same, where non-RNG simply has a 100% chance to trigger/proc, but that would mess up the trigger count in final battle report - non-RNG skills that are always active from the start of the battle shows up as being triggered only once in battle reports.
 
-```text
-100% chance
-50% chance
-25% chance
+so i dont see any reason for ACtivationRule currently, other than being for RNG skills, which could just as well be a condition like:
+```python
+conditions=[
+    RandomChanceCondition(0.4)
+  ]
 ```
-
-Non-RNG skills are simply:
-
-```text
-chance = 1.0
-```
-
 ---
 
 # Conditions
@@ -277,14 +271,12 @@ Examples:
 
 ```text
 SELF
-
 ENEMY
-
 SELF_INFANTRY
-
 ENEMY_INFANTRY
-
-CURRENT_ATTACK_TARGET
+CURRENT_TARGET
+ATTACKER_OF_STATUS_TARGET
+DEFENDER_OF_STATUS_TARGET
 ```
 
 The battle engine determines actual targets.
@@ -300,11 +292,11 @@ This is important because some mechanics (such as cavalry retargeting) can dynam
 Effects are grouped by:
 
 ```text
-OpType
-OpId
+Effect type
+Effect operands ID
 ```
 
-Same OpId:
+Same effect_op:
 
 ```text
 add together
@@ -327,7 +319,7 @@ DamageUp 101
 +50%
 ```
 
-Different OpIds:
+Different effect_op:
 
 ```text
 multiply
@@ -355,21 +347,11 @@ This behavior is implemented through EffectCollection.
 Current theory:
 
 ```text
-SkillMod =
-(
-DamageUp
-× OppDefenseDown
-× TroopDamageUp
-× TroopOppDefenseDown
-)
-/
-(
-DefenseUp
-× OppDamageDown
-× TroopDefenseUp
-× TroopOppDamageDown
-)
+SkillMod = (DamageUp × OppDefenseDown × TroopDamageUp × TroopOppDefenseDown) / (DefenseUp × OppDamageDown × TroopDefenseUp × TroopOppDamageDown)
 ```
+NOTE:  
+Not sure about the specific troop effect types, but Daryl has made it clear that troop skills have their own "skill ID's" separate from hero skills which MIGHT simply be same effect types (e.g. DamageUp) but different effect_op's than ANY hero skill in existicense OR separate effect types for troop skills.  
+Either way, troop skills stack multiplicitavely, so should be functinoally same either way.  
 
 The skill engine is responsible for calculating each component.
 
@@ -425,7 +407,7 @@ The BattleEngine should:
 
 * Execute turns
 * Execute phases
-* Determine targets
+* Determine targets (i.e. targeting mechanics/algorithm)
 * Request modifiers from SkillEngine
 * Calculate damage
 * Apply casualties
@@ -446,12 +428,12 @@ and uses the answer in damage calculations.
 
 # Long-Term Goal
 
-The framework should allow theorycrafters to model skills by composing behavior from reusable building blocks rather than writing custom code for every hero.
+HOPEFULLY a framework that allow theorycrafters to model skills by composing behavior from reusable building blocks rather than writing custom code and ad-hoc handlers for every hero (and troop) skill
 
 Ideally, new skills become mostly data:
 
 * Trigger
-* Activation
+* (Activation - see above, this is prob superflous)
 * Conditions
 * Targets
 * Effects
