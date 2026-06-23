@@ -7,7 +7,7 @@ A skill is **not** simply a bonus value attached to a hero or troop.
 Instead, a skill is a collection of:
 
 * Trigger rules
-* Activation rules
+* (Activation rules - see below, migh be superflous and unnecessary)
 * Conditions
 * Targeting rules
 * Effects
@@ -31,9 +31,9 @@ Instead:
 Every skill follows the same conceptual pipeline:
 
 ```text
-Trigger
+Trigger (i.e. when is a skill evaluated, does not mean a RNG roll/chance to trigger)
   ↓
-Activation Roll
+Activation Roll (confusing - RNG could be a Condition instead)
   ↓
 Condition Check
   ↓
