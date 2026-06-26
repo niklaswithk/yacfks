@@ -3,22 +3,18 @@ from dataclasses import dataclass, field
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.domains.widget import WidgetDefinition
 from yacfks.app.battle.skills.enums import TriggerType
-from yacfks.app.battle.skills.definitions import SkillEffect, ActivationRule, SkillLevelData
+from yacfks.app.battle.skills.definitions import SkillEffect, SkillLevelData
 from yacfks.app.battle.skills.conditions import SkillCondition
 
-# basci represnation of what a Hero is in database:)
-# skills will be added later
+
 @dataclass(frozen=True)
 class HeroDefinition:
-
     id: int
     name: str
     troop_type: TroopType
-    #skills come later
-    widget: WidgetDefinition | None = None # widget optional since, well not all heroes have them
+    widget: WidgetDefinition | None = None
 
 
-# a represenation of Hero selection in UI.
 @dataclass
 class HeroSelection:
     hero: HeroDefinition
@@ -30,12 +26,10 @@ class HeroSelection:
 class HeroSkillDefinition:
     id: int
     name: str
-
-    activation: ActivationRule
     trigger: TriggerType
     effects: list[SkillEffect]
     conditions: list[SkillCondition]
-    level_data: dict[int, SkillLevelData] | None = None  # level → values per effect_op
+    level_data: dict[int, SkillLevelData] | None = None
 
 
 @dataclass

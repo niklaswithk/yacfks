@@ -1,14 +1,11 @@
 from yacfks.app.domains.troop import TroopDefinition, TroopSkill
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope
-from yacfks.app.battle.skills.definitions import (
-    ActivationRule, Duration, TargetRule, SkillEffect, SkillLevelData,
-)
-from yacfks.app.battle.skills.conditions import RequiresTargetTroopType
+from yacfks.app.battle.skills.definitions import Duration, TargetRule, SkillEffect, SkillLevelData
+from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresTargetTroopType
 
 # ── shared skill building blocks ──────────────────────────────────────────────
 
-_ALWAYS = ActivationRule(is_rng=False, chance=None)
 _DURATION_1 = Duration(turns=1)
 _SELF_TARGET = TargetRule(scope=TargetScope.SELF_ARMY)
 _ENEMY_TARGET = TargetRule(scope=TargetScope.ENEMY_ARMY)
@@ -17,7 +14,6 @@ _ENEMY_TARGET = TargetRule(scope=TargetScope.ENEMY_ARMY)
 _INF_ANTI_CAV = TroopSkill(
     id=201,
     name="Anti-Cavalry Charge",
-    activation=_ALWAYS,
     trigger=TriggerType.ATTACK,
     effects=[
         SkillEffect(
@@ -29,7 +25,7 @@ _INF_ANTI_CAV = TroopSkill(
     ],
     conditions=[RequiresTargetTroopType(TroopType.CAV)],
     level_data={
-        1: SkillLevelData(skill_id=201, level=1, activation_chance=None, values={201: 10.0})
+        1: SkillLevelData(skill_id=201, level=1, values={201: 10.0})
     },
 )
 
@@ -37,7 +33,6 @@ _INF_ANTI_CAV = TroopSkill(
 _CAV_ANTI_ARCH = TroopSkill(
     id=202,
     name="Anti-Archer Charge",
-    activation=_ALWAYS,
     trigger=TriggerType.ATTACK,
     effects=[
         SkillEffect(
@@ -49,7 +44,7 @@ _CAV_ANTI_ARCH = TroopSkill(
     ],
     conditions=[RequiresTargetTroopType(TroopType.ARCH)],
     level_data={
-        1: SkillLevelData(skill_id=202, level=1, activation_chance=None, values={202: 10.0})
+        1: SkillLevelData(skill_id=202, level=1, values={202: 10.0})
     },
 )
 
@@ -57,7 +52,6 @@ _CAV_ANTI_ARCH = TroopSkill(
 _ARCH_ANTI_INF = TroopSkill(
     id=203,
     name="Anti-Infantry Volley",
-    activation=_ALWAYS,
     trigger=TriggerType.ATTACK,
     effects=[
         SkillEffect(
@@ -69,7 +63,7 @@ _ARCH_ANTI_INF = TroopSkill(
     ],
     conditions=[RequiresTargetTroopType(TroopType.INF)],
     level_data={
-        1: SkillLevelData(skill_id=203, level=1, activation_chance=None, values={203: 10.0})
+        1: SkillLevelData(skill_id=203, level=1, values={203: 10.0})
     },
 )
 
@@ -78,7 +72,6 @@ _ARCH_ANTI_INF = TroopSkill(
 _CAV_T7_RETARGET = TroopSkill(
     id=301,
     name="Cavalry Flanking",
-    activation=ActivationRule(is_rng=True, chance=0.20),
     trigger=TriggerType.ATTACK,
     effects=[
         SkillEffect(
@@ -88,9 +81,9 @@ _CAV_T7_RETARGET = TroopSkill(
             duration=Duration(turns=1),
         )
     ],
-    conditions=[],
+    conditions=[RandomChanceCondition(chance=0.20)],
     level_data={
-        1: SkillLevelData(skill_id=301, level=1, activation_chance=0.20, values={301: 1.0})
+        1: SkillLevelData(skill_id=301, level=1, values={301: 1.0})
     },
 )
 

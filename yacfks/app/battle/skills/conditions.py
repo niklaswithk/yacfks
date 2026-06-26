@@ -8,6 +8,12 @@ class SkillCondition:
 
 
 @dataclass(frozen=True)
+class RandomChanceCondition(SkillCondition):
+    """Skill fires only when rng_fn() < chance. Range: [0.0, 1.0]."""
+    chance: float
+
+
+@dataclass(frozen=True)
 class RequiresFriendlyTroopType(SkillCondition):
     """Skill only activates if friendly troops of this type are present and alive."""
     troop_type: TroopType

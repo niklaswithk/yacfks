@@ -2,8 +2,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.battle.skills.enums import TriggerType
-from yacfks.app.battle.skills.definitions import SkillEffect, ActivationRule, SkillLevelData
+from yacfks.app.battle.skills.definitions import SkillEffect, SkillLevelData
 from yacfks.app.battle.skills.conditions import SkillCondition
+
 
 @dataclass
 class TroopDefinition:
@@ -15,9 +16,10 @@ class TroopDefinition:
     base_lethality: float
     base_health: float
     base_defense: float
-    
-    # troop skills are shared, so say you have lots of T6 and only 1 T7, the whole ArmyLine of that troop type gets the T7 skill.
+
+    # Troop skills are shared: if there's even 1 T7 in an ArmyLine, the whole line gets T7 skills.
     skills: list[TroopSkill]
+
 
 @dataclass
 class TroopStack:
@@ -29,9 +31,7 @@ class TroopStack:
 class TroopSkill:
     id: int
     name: str
-
-    activation: ActivationRule
     trigger: TriggerType
     effects: list[SkillEffect]
     conditions: list[SkillCondition]
-    level_data: dict[int, SkillLevelData] | None = None  # level → values per effect_op
+    level_data: dict[int, SkillLevelData] | None = None

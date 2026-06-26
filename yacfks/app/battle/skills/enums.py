@@ -31,17 +31,20 @@ class EffectType(Enum):
 
 
 class TargetScope(Enum):
-    SELF_ARMY = "self_army"
-    ENEMY_ARMY = "enemy_army"
-    CURRENT_TARGET = "current_target"
-    RANDOM_ENEMY_LINE = "random_enemy_line"
+    # Own army — all troops or specific troop type
+    SELF_ARMY     = "self_army"
+    SELF_INFANTRY = "self_infantry"
+    SELF_CAVALRY  = "self_cavalry"
+    SELF_ARCHERS  = "self_archers"
+
+    # Enemy army — all troops, specific troop type, or dynamic target
+    ENEMY_ARMY          = "enemy_army"
+    ENEMY_INFANTRY      = "enemy_infantry"
+    ENEMY_CAVALRY       = "enemy_cavalry"
+    ENEMY_ARCHERS       = "enemy_archers"
+    CURRENT_TARGET      = "current_target"       # whichever enemy line is currently targeted
+    RANDOM_ENEMY_LINE   = "random_enemy_line"    # randomly selected enemy troop type
+
+    # Status-chain targeting (for skills that affect the host of an existing status)
     ATTACKER_OF_STATUS_TARGET = "attacker_of_status_target"
     DEFENDER_OF_STATUS_TARGET = "defender_of_status_target"
-
-    # SELF_INFANTRY = "self_infantry"
-    # SELF_CAVALRY = "self_cavalry"
-    # SELF_ARCHERS = "self_archers"
-
-    # ENEMY_INFANTRY = "enemy_infantry"
-    # ENEMY_CAVALRY = "enemy_cavalry"
-    # ENEMY_ARCHERS = "enemy_archers"

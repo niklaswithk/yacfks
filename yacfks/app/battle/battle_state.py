@@ -1,17 +1,8 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from yacfks.app.battle.battle_line_state import BattleLineState
-from yacfks.app.battle.skills.definitions import SkillEffect
+from yacfks.app.battle.skills.statuses import ActiveStatus
 from yacfks.app.domains.enums import BattleSide, TroopType
-
-
-@dataclass
-class ActiveEffect:
-    source_skill_id: int
-    effect_type: SkillEffect
-    value: float
-    expires_turn: int
-    target_side: BattleSide
-    target_troop: TroopType | None
 
 
 @dataclass
@@ -26,7 +17,8 @@ class BattleState:
     defender_arch: BattleLineState
 
     turn: int = 1
-    active_effects: list[ActiveEffect] = field(default_factory=list)
+    active_statuses: list[ActiveStatus] = field(default_factory=list)
+    pending_statuses: list[ActiveStatus] = field(default_factory=list)  # applied this turn, active from next
 
     def get_line(self, side: BattleSide, troop_type: TroopType) -> BattleLineState:
         if side == BattleSide.ATTACKER:

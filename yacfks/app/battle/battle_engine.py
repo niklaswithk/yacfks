@@ -1,3 +1,4 @@
+from __future__ import annotations
 from yacfks.app.battle.battle_setup import BattleContext
 from yacfks.app.battle.battle_state import BattleState
 from yacfks.app.battle.battle_line_state import BattleLineState
@@ -21,6 +22,11 @@ class BattleEngine:
 
     def run(self, context: BattleContext) -> BattleResult:
         state = self._init_state(context)
+
+        # ALWAYS skills fire exactly once per battle: create permanent statuses now.
+        # These go directly into active_statuses (SELF scope → immediate).
+        self._apply_always_skills(context, state)
+
         snapshots: list[BattleSnapshot] = []
 
         while True:
@@ -44,10 +50,44 @@ class BattleEngine:
     # ── turn execution ────────────────────────────────────────────────────────
 
     def _run_turn(self, context: BattleContext, state: BattleState) -> None:
-        # Attacker attacks, then defender attacks. Casualties applied at the end.
+        # TURN_START fires once per turn: evaluate hero skills for both sides.
+        # Results land in pending_statuses (enemy-scope) or active_statuses (self-scope).
+        self._apply_turn_start_skills(context, state)
+
+        # Each side runs its 3 attack phases.
         self._run_side_attacks(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
         self._run_side_attacks(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
+
         self._apply_losses(state)
+        self._tick_statuses(state)
+
+    def _apply_always_skills(self, context: BattleContext, state: BattleState) -> None:
+        for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
+            skill_ctx = SkillContext(
+                battle_context=context,
+                battle_state=state,
+                attacking_side=side,
+                attacker_troop_type=None,
+                defender_troop_type=None,
+            )
+            self._skill_engine.collect_effects(
+                self._hero_skills_for_side(context, side), [],
+                TriggerType.ALWAYS, skill_ctx,
+            )
+
+    def _apply_turn_start_skills(self, context: BattleContext, state: BattleState) -> None:
+        for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
+            skill_ctx = SkillContext(
+                battle_context=context,
+                battle_state=state,
+                attacking_side=side,
+                attacker_troop_type=None,
+                defender_troop_type=None,
+            )
+            self._skill_engine.collect_effects(
+                self._hero_skills_for_side(context, side), [],
+                TriggerType.TURN_START, skill_ctx,
+            )
 
     def _run_side_attacks(
         self,
@@ -57,21 +97,6 @@ class BattleEngine:
         def_side: BattleSide,
     ) -> None:
         att_hero_skills = self._hero_skills_for_side(context, att_side)
-        def_hero_skills = self._hero_skills_for_side(context, def_side)
-        skill_ctx = SkillContext(
-            battle_context=context,
-            battle_state=state,
-            attacker_troop_type=None,
-            defender_troop_type=None,
-        )
-
-        # Roll TURN_START effects: offensive from attacking side, defensive from defending side
-        turn_att_ec, _ = self._skill_engine.collect_effects(
-            att_hero_skills, [], TriggerType.TURN_START, skill_ctx
-        )
-        _, turn_def_ec = self._skill_engine.collect_effects(
-            def_hero_skills, [], TriggerType.TURN_START, skill_ctx
-        )
 
         att_final_stats = (
             context.attacker_final_stats if att_side == BattleSide.ATTACKER
@@ -89,26 +114,37 @@ class BattleEngine:
 
             target_type = self._get_target(state, def_side)
             if target_type is None:
-                break  # all defender lines dead
+                break
 
             troop_skills = self._troop_skills_for_line(context, att_side, att_type)
 
-            skill_ctx.attacker_troop_type = att_type
-            skill_ctx.defender_troop_type = target_type
+            skill_ctx = SkillContext(
+                battle_context=context,
+                battle_state=state,
+                attacking_side=att_side,
+                attacker_troop_type=att_type,
+                defender_troop_type=target_type,
+            )
 
-            # Roll ATTACK effects per phase: offensive from attacking side, defensive from defending side
-            phase_att_ec, _ = self._skill_engine.collect_effects(
+            # Evaluate ATTACK-trigger hero skills and troop skills for the attacker.
+            # Hero skills producing statuses write to battle_state (context carries the state).
+            # Defender hero ATTACK skills fire when the defender's own _run_side_attacks runs,
+            # so we do NOT evaluate def_hero_skills here (attacking_side would be wrong).
+            phase_numerator_ec, _ = self._skill_engine.collect_effects(
                 att_hero_skills, troop_skills, TriggerType.ATTACK, skill_ctx
             )
-            _, phase_def_ec = self._skill_engine.collect_effects(
-                def_hero_skills, [], TriggerType.ATTACK, skill_ctx
+
+            # Status-derived effects: read from active_statuses for this exact phase
+            status_numerator_ec, status_denominator_ec = self._skill_engine.collect_phase_effects(
+                state.active_statuses,
+                att_side=att_side, att_type=att_type,
+                def_side=def_side, target_type=target_type,
             )
 
-            # Merge turn-start + phase collections (keeping offensive and defensive separate)
-            merged_att_ec = _merge(turn_att_ec, phase_att_ec)
-            merged_def_ec = _merge(turn_def_ec, phase_def_ec)
+            merged_numerator = _merge(phase_numerator_ec, status_numerator_ec)
+            merged_denominator = _merge(status_denominator_ec)
 
-            skill_mod = self._skill_engine.compute_skill_mod(merged_att_ec, merged_def_ec)
+            skill_mod = self._skill_engine.compute_skill_mod(merged_numerator, merged_denominator)
 
             att_stats = att_final_stats.get_final_stats(att_type)
             def_stats = def_final_stats.get_final_stats(target_type)
@@ -137,6 +173,21 @@ class BattleEngine:
                 line = state.get_line(side, t)
                 line.troop_count = max(0, line.troop_count - line.pending_losses)
                 line.pending_losses = 0
+
+    def _tick_statuses(self, state: BattleState) -> None:
+        # Pending enemy-scope statuses (curses etc.) become active for the next turn.
+        state.active_statuses.extend(state.pending_statuses)
+        state.pending_statuses = []
+
+        surviving = []
+        for status in state.active_statuses:
+            if status.remaining_turns == -1:  # permanent
+                surviving.append(status)
+                continue
+            status.remaining_turns -= 1
+            if status.remaining_turns > 0:
+                surviving.append(status)
+        state.active_statuses = surviving
 
     def _snapshot(self, state: BattleState) -> BattleSnapshot:
         return BattleSnapshot(
@@ -196,14 +247,12 @@ class BattleEngine:
         return army.get_line(troop_type).troop_skills
 
 
-def _merge(ec1, ec2):
-    """Combine two EffectCollections into a new one (non-destructive)."""
+def _merge(*collections):
+    """Combine any number of EffectCollections into one (non-destructive)."""
     from yacfks.app.battle.skills.effect_collection import EffectCollection
     merged = EffectCollection()
-    for effect_type, ops in ec1.effects.items():
-        for op, total in ops.items():
-            merged.add(effect_type, op, total)
-    for effect_type, ops in ec2.effects.items():
-        for op, total in ops.items():
-            merged.add(effect_type, op, total)
+    for ec in collections:
+        for effect_type, ops in ec.effects.items():
+            for op, total in ops.items():
+                merged.add(effect_type, op, total)
     return merged
