@@ -1,4 +1,3 @@
-from __future__ import annotations
 from yacfks.app.battle.battle_setup import BattleContext
 from yacfks.app.battle.battle_state import BattleState
 from yacfks.app.battle.battle_line_state import BattleLineState
@@ -24,7 +23,7 @@ class BattleEngine:
         state = self._init_state(context)
 
         # ALWAYS skills fire exactly once per battle: create permanent statuses now.
-        # These go directly into active_statuses (SELF scope → immediate).
+        # These go directly into active_statuses.
         self._apply_always_skills(context, state)
 
         snapshots: list[BattleSnapshot] = []
@@ -51,7 +50,7 @@ class BattleEngine:
 
     def _run_turn(self, context: BattleContext, state: BattleState) -> None:
         # TURN_START fires once per turn: evaluate hero skills for both sides.
-        # Results land in pending_statuses (enemy-scope) or active_statuses (self-scope).
+        # Results land in pending_statuses (i.e. skills with a N-turn delay) or active_statuses.
         self._apply_turn_start_skills(context, state)
 
         # Each side runs its 3 attack phases.

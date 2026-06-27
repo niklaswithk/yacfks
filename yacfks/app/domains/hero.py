@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.domains.widget import WidgetDefinition
 from yacfks.app.battle.skills.enums import TriggerType
-from yacfks.app.battle.skills.definitions import SkillEffect, SkillLevelData
+from yacfks.app.battle.skills.definitions import SkillLevelData
+from yacfks.app.battle.skills.statuses import StatusApplication
 from yacfks.app.battle.skills.conditions import SkillCondition
 
 
@@ -27,7 +28,7 @@ class HeroSkillDefinition:
     id: int
     name: str
     trigger: TriggerType
-    effects: list[SkillEffect]
+    status_applications: list[StatusApplication]
     conditions: list[SkillCondition]
     level_data: dict[int, SkillLevelData] | None = None
 

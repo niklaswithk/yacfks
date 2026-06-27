@@ -23,11 +23,10 @@ class EffectType(Enum):
     TROOP_DAMAGE_UP = "TroopDamageUp"
     TROOP_DEFENSE_UP = "TroopDefenseUp"
 
-    RETARGET = "retarget" #for T7 cav, might restruct this
+    RETARGET = "retarget"
     # are these a thing?:
     # TROOPOPPDMGDOWN = "TroopOppDamageDown"
     # TROOPOPPDEFDOWN = "TroopOppDefenseDown"
-    APPLY_STATUS = "apply_status"
 
 
 class TargetScope(Enum):

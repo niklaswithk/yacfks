@@ -1,10 +1,10 @@
 import pytest
 from yacfks.app.battle.skills.skill_engine import SkillEngine
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope, StackRule
-from yacfks.app.battle.skills.definitions import Duration, SkillEffect, SkillLevelData
+from yacfks.app.battle.skills.definitions import SkillEffect, SkillLevelData
 from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresTargetTroopType
 from yacfks.app.battle.skills.skill_context import SkillContext
-from yacfks.app.battle.skills.statuses import ActiveStatus, StatusDefinition, register_status
+from yacfks.app.battle.skills.statuses import ActiveStatus, StatusApplication, StatusDefinition, register_status
 from yacfks.app.battle.battle_state import BattleState
 from yacfks.app.battle.battle_line_state import BattleLineState
 from yacfks.app.domains.hero import HeroSkillDefinition, HeroSkillSelection
@@ -14,8 +14,6 @@ from yacfks.app.domains.enums import TroopType, BattleSide
 
 # ── Test infrastructure ───────────────────────────────────────────────────────
 
-DURATION_PERM = Duration(turns=0)
-DURATION_1 = Duration(turns=1)
 SELF_TARGET = TargetScope.SELF_ARMY
 ENEMY_TARGET = TargetScope.ENEMY_ARMY
 
@@ -49,29 +47,29 @@ def engine() -> SkillEngine:
 # ── Shared test StatusDefinitions (IDs 8100-8199) ────────────────────────────
 
 _T_DAMAGE_UP_101 = register_status(StatusDefinition(
-    id=8101, name="Test DamageUp 101", default_duration=-1,
-    effects=[SkillEffect(EffectType.DAMAGE_UP, 101, SELF_TARGET, DURATION_PERM)],
+    id=8101, name="Test DamageUp 101", duration=-1,
+    effects=[SkillEffect(EffectType.DAMAGE_UP, 101, SELF_TARGET)],
     stack_rule=StackRule.STACK,
 ))
 _T_DAMAGE_UP_102 = register_status(StatusDefinition(
-    id=8102, name="Test DamageUp 102", default_duration=-1,
-    effects=[SkillEffect(EffectType.DAMAGE_UP, 102, SELF_TARGET, DURATION_PERM)],
+    id=8102, name="Test DamageUp 102", duration=-1,
+    effects=[SkillEffect(EffectType.DAMAGE_UP, 102, SELF_TARGET)],
     stack_rule=StackRule.STACK,
 ))
 _T_DEFENSE_UP_111 = register_status(StatusDefinition(
-    id=8103, name="Test DefenseUp 111", default_duration=-1,
-    effects=[SkillEffect(EffectType.DEFENSE_UP, 111, SELF_TARGET, DURATION_PERM)],
+    id=8103, name="Test DefenseUp 111", duration=-1,
+    effects=[SkillEffect(EffectType.DEFENSE_UP, 111, SELF_TARGET)],
     stack_rule=StackRule.STACK,
 ))
 _T_TROOP_DAMAGE_UP_201 = register_status(StatusDefinition(
-    id=8104, name="Test TroopDamageUp 201", default_duration=-1,
-    effects=[SkillEffect(EffectType.TROOP_DAMAGE_UP, 201, SELF_TARGET, DURATION_PERM)],
+    id=8104, name="Test TroopDamageUp 201", duration=-1,
+    effects=[SkillEffect(EffectType.TROOP_DAMAGE_UP, 201, SELF_TARGET)],
     stack_rule=StackRule.STACK,
 ))
 _T_RNG_CURSE_199 = register_status(StatusDefinition(
-    id=8105, name="Test RNG Curse 199", default_duration=1,
+    id=8105, name="Test RNG Curse 199", duration=1,
     apply_delay=1,  # curse activates next turn
-    effects=[SkillEffect(EffectType.DAMAGE_UP, 199, ENEMY_TARGET, DURATION_1)],
+    effects=[SkillEffect(EffectType.DAMAGE_UP, 199, ENEMY_TARGET)],
     stack_rule=StackRule.UNIQUE,
 ))
 
@@ -81,7 +79,7 @@ def _always_apply_status_skill(status_def: StatusDefinition, values: dict, skill
     return HeroSkillDefinition(
         id=skill_id, name=f"Test-{status_def.name}",
         trigger=TriggerType.ALWAYS,
-        effects=[SkillEffect(EffectType.APPLY_STATUS, status_def.id, SELF_TARGET, DURATION_PERM)],
+        status_applications=[StatusApplication(status_def, TargetScope.SELF_ARMY)],
         conditions=[],
         level_data={1: SkillLevelData(skill_id=skill_id, level=1, values=values)},
     )
@@ -95,11 +93,10 @@ def _rng_ts_apply_status_skill(
     target: TargetScope = None,
 ) -> HeroSkillDefinition:
     """TURN_START RNG skill that applies the given status."""
-    target = target or SELF_TARGET
     return HeroSkillDefinition(
         id=skill_id, name=f"RNG-{status_def.name}",
         trigger=TriggerType.TURN_START,
-        effects=[SkillEffect(EffectType.APPLY_STATUS, status_def.id, target, DURATION_PERM)],
+        status_applications=[StatusApplication(status_def, target or TargetScope.SELF_ARMY)],
         conditions=[RandomChanceCondition(chance=chance)],
         level_data={1: SkillLevelData(skill_id=skill_id, level=1, values=values)},
     )
@@ -273,23 +270,23 @@ class TestSkillStacking:
 
 # Triton-like: different defense bonuses depending on which troop type is targeted
 _T_TRITON_LIKE = register_status(StatusDefinition(
-    id=8201, name="Test Oath-like", default_duration=-1,
+    id=8201, name="Test Oath-like", duration=-1,
     effects=[
-        SkillEffect(EffectType.DEFENSE_UP, 301, TargetScope.SELF_INFANTRY, DURATION_PERM),  # 20%
-        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_CAVALRY,  DURATION_PERM),  # 30%
-        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # 30%
+        SkillEffect(EffectType.DEFENSE_UP, 301, TargetScope.SELF_INFANTRY),  # 20%
+        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_CAVALRY),  # 30%
+        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_ARCHERS),  # 30%
     ],
     stack_rule=StackRule.STACK,
 ))
 
 # Thrud-like: both offensive (DAMAGE_UP) and defensive (DEFENSE_UP) effects on same troop types
 _T_THRUD_LIKE = register_status(StatusDefinition(
-    id=8202, name="Test Hunger-like", default_duration=-1,
+    id=8202, name="Test Hunger-like", duration=-1,
     effects=[
-        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_INFANTRY, DURATION_PERM),  # +15% offense INF
-        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # +15% offense ARCH
-        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_INFANTRY, DURATION_PERM),  # +15% defense INF
-        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # +15% defense ARCH
+        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_INFANTRY),  # +15% offense INF
+        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_ARCHERS),  # +15% offense ARCH
+        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_INFANTRY),  # +15% defense INF
+        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_ARCHERS),  # +15% defense ARCH
     ],
     stack_rule=StackRule.STACK,
 ))
@@ -442,7 +439,7 @@ def _make_anti_cav_skill() -> TroopSkill:
     return TroopSkill(
         id=201, name="Anti-Cavalry Charge",
         trigger=TriggerType.ATTACK,
-        effects=[SkillEffect(EffectType.TROOP_DAMAGE_UP, 201, SELF_TARGET, DURATION_1)],
+        effects=[SkillEffect(EffectType.TROOP_DAMAGE_UP, 201, SELF_TARGET)],
         conditions=[RequiresTargetTroopType(TroopType.CAV)],
         level_data={1: SkillLevelData(skill_id=201, level=1, values={201: 10.0})},
     )
@@ -484,9 +481,9 @@ class TestTroopSkills:
 _TEST_CURSE_STATUS = register_status(StatusDefinition(
     id=9001,
     name="TestCurse",
-    default_duration=1,
+    duration=1,
     apply_delay=1,  # curse activates next turn
-    effects=[SkillEffect(EffectType.DAMAGE_UP, 199, ENEMY_TARGET, DURATION_1)],
+    effects=[SkillEffect(EffectType.DAMAGE_UP, 199, ENEMY_TARGET)],
     stack_rule=StackRule.UNIQUE,
 ))
 
@@ -496,7 +493,7 @@ def _make_enemy_apply_status_skill(rng: bool = False, chance: float = 0.5) -> He
     return HeroSkillDefinition(
         id=9001, name="Test Evil Eye",
         trigger=TriggerType.TURN_START,
-        effects=[SkillEffect(EffectType.APPLY_STATUS, _TEST_CURSE_STATUS.id, ENEMY_TARGET, DURATION_1)],
+        status_applications=[StatusApplication(_TEST_CURSE_STATUS, TargetScope.ENEMY_ARMY)],
         conditions=conditions,
         level_data={1: SkillLevelData(skill_id=9001, level=1, values={199: 40.0})},
     )
@@ -569,15 +566,15 @@ class TestApplyStatus:
         # Skill designer can choose apply_delay=0 on an enemy-scoped status
         # for instant effects that take hold the same turn they're applied.
         instant_curse = register_status(StatusDefinition(
-            id=9002, name="ImmediateCurse", default_duration=1,
+            id=9002, name="ImmediateCurse", duration=1,
             apply_delay=0,
-            effects=[SkillEffect(EffectType.DAMAGE_UP, 198, ENEMY_TARGET, DURATION_1)],
+            effects=[SkillEffect(EffectType.DAMAGE_UP, 198, ENEMY_TARGET)],
             stack_rule=StackRule.UNIQUE,
         ))
         skill = HeroSkillDefinition(
             id=9002, name="Instant Terror",
             trigger=TriggerType.TURN_START,
-            effects=[SkillEffect(EffectType.APPLY_STATUS, instant_curse.id, ENEMY_TARGET, DURATION_1)],
+            status_applications=[StatusApplication(instant_curse, TargetScope.ENEMY_ARMY)],
             conditions=[],
             level_data={1: SkillLevelData(skill_id=9002, level=1, values={198: 25.0})},
         )

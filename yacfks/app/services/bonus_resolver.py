@@ -8,6 +8,7 @@ class BonusResolver:
      Resolves effective stats bonuses, using either a simple case of stats from a rally report,
      or helping account for widgets if stats input comes from a solo battle report.
      Values for stats/widget bonuses are assumed to already account for the base (we're talking relative increases here people, they're simply multipliers >= 1)
+     Ths bonusresolver can be extended to support other types of bonsues, like pets, city bonuses, masters etc.
     """
     # might have more stuff here, like loading Pet or bear data or something in teh future, for now only work with widgets
     def __init__(self, widget_repo: WidgetRepo):

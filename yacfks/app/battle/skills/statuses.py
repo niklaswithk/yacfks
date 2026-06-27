@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from yacfks.app.battle.skills.definitions import SkillEffect
-from yacfks.app.battle.skills.enums import StackRule
+from yacfks.app.battle.skills.enums import StackRule, TargetScope
 from yacfks.app.domains.enums import BattleSide, TroopType
 
 
@@ -13,10 +13,20 @@ class StatusDefinition:
     """
     id: int
     name: str
-    default_duration: int        # turns the status persists; -1 = entire battle
+    duration: int                # turns the status persists; -1 = entire battle
     effects: list[SkillEffect]   # effect type + op templates (no values here)
     stack_rule: StackRule
     apply_delay: int = 0         # 0 = active this turn, 1 = active next turn, etc.
+
+
+@dataclass(frozen=True)
+class StatusApplication:
+    """
+    Pairs a StatusDefinition with a placement scope for use in HeroSkillDefinition.
+    Answers: which status to apply, and where (own side vs enemy side, which troop type).
+    """
+    status: StatusDefinition
+    scope: TargetScope
 
 
 @dataclass
@@ -34,8 +44,8 @@ class ActiveStatus:
 
 
 # ── Global status registry ────────────────────────────────────────────────────
-# Skills reference statuses by ID via APPLY_STATUS effects.
 # Call register_status() when defining a StatusDefinition (e.g., in hero_repo/status_repo).
+# HeroSkillDefinition.status_applications reference StatusDefinitions directly by object reference.
 
 _STATUS_REGISTRY: dict[int, StatusDefinition] = {}
 

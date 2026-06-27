@@ -1,12 +1,10 @@
 from yacfks.app.domains.troop import TroopDefinition, TroopSkill
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope
-from yacfks.app.battle.skills.definitions import Duration, SkillEffect, SkillLevelData
+from yacfks.app.battle.skills.definitions import SkillEffect, SkillLevelData
 from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresTargetTroopType
 
 # ── shared skill building blocks ──────────────────────────────────────────────
-
-_DURATION_1 = Duration(turns=1)
 
 # INF T1+: +10% TROOP_DAMAGE_UP vs enemy cavalry (effect_op 201)
 _INF_ANTI_CAV = TroopSkill(
@@ -18,7 +16,7 @@ _INF_ANTI_CAV = TroopSkill(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=201,
             scope=TargetScope.SELF_ARMY,
-            duration=_DURATION_1,
+
         )
     ],
     conditions=[RequiresTargetTroopType(TroopType.CAV)],
@@ -37,7 +35,7 @@ _CAV_ANTI_ARCH = TroopSkill(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=202,
             scope=TargetScope.SELF_ARMY,
-            duration=_DURATION_1,
+
         )
     ],
     conditions=[RequiresTargetTroopType(TroopType.ARCH)],
@@ -56,7 +54,7 @@ _ARCH_ANTI_INF = TroopSkill(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=203,
             scope=TargetScope.SELF_ARMY,
-            duration=_DURATION_1,
+
         )
     ],
     conditions=[RequiresTargetTroopType(TroopType.INF)],
@@ -76,7 +74,7 @@ _CAV_T7_RETARGET = TroopSkill(
             effect_type=EffectType.RETARGET,
             effect_op=301,
             scope=TargetScope.ENEMY_ARMY,
-            duration=Duration(turns=1),
+
         )
     ],
     conditions=[RandomChanceCondition(chance=0.20)],
