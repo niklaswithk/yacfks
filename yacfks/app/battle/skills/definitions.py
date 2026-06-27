@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass
 from yacfks.app.battle.skills.enums import EffectType, TargetScope
 
@@ -8,16 +9,12 @@ class Duration:
 
 
 @dataclass(frozen=True)
-class TargetRule:
-    scope: TargetScope
-
-
-@dataclass(frozen=True)
 class SkillEffect:
-    effect_type: EffectType
-    effect_op: int
-    target_rule: TargetRule
-    duration: Duration
+    effect_type:      EffectType
+    effect_op:        int
+    scope:            TargetScope
+    duration:         Duration
+    benefactor_scope: TargetScope | None = None  # restricts which own troop type benefits from enemy-side effects; None = all
 
 
 @dataclass(frozen=True)

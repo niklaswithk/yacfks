@@ -1,7 +1,7 @@
 import pytest
 from yacfks.app.battle.skills.skill_engine import SkillEngine
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope, StackRule
-from yacfks.app.battle.skills.definitions import Duration, TargetRule, SkillEffect, SkillLevelData
+from yacfks.app.battle.skills.definitions import Duration, SkillEffect, SkillLevelData
 from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresTargetTroopType
 from yacfks.app.battle.skills.skill_context import SkillContext
 from yacfks.app.battle.skills.statuses import ActiveStatus, StatusDefinition, register_status
@@ -16,8 +16,8 @@ from yacfks.app.domains.enums import TroopType, BattleSide
 
 DURATION_PERM = Duration(turns=0)
 DURATION_1 = Duration(turns=1)
-SELF_TARGET = TargetRule(scope=TargetScope.SELF_ARMY)
-ENEMY_TARGET = TargetRule(scope=TargetScope.ENEMY_ARMY)
+SELF_TARGET = TargetScope.SELF_ARMY
+ENEMY_TARGET = TargetScope.ENEMY_ARMY
 
 
 def make_minimal_battle_state() -> BattleState:
@@ -92,7 +92,7 @@ def _rng_ts_apply_status_skill(
     values: dict,
     chance: float = 0.5,
     skill_id: int = 2,
-    target: TargetRule = None,
+    target: TargetScope = None,
 ) -> HeroSkillDefinition:
     """TURN_START RNG skill that applies the given status."""
     target = target or SELF_TARGET
@@ -275,9 +275,9 @@ class TestSkillStacking:
 _T_TRITON_LIKE = register_status(StatusDefinition(
     id=8201, name="Test Oath-like", default_duration=-1,
     effects=[
-        SkillEffect(EffectType.DEFENSE_UP, 301, TargetRule(TargetScope.SELF_INFANTRY), DURATION_PERM),  # 20%
-        SkillEffect(EffectType.DEFENSE_UP, 302, TargetRule(TargetScope.SELF_CAVALRY),  DURATION_PERM),  # 30%
-        SkillEffect(EffectType.DEFENSE_UP, 302, TargetRule(TargetScope.SELF_ARCHERS),  DURATION_PERM),  # 30%
+        SkillEffect(EffectType.DEFENSE_UP, 301, TargetScope.SELF_INFANTRY, DURATION_PERM),  # 20%
+        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_CAVALRY,  DURATION_PERM),  # 30%
+        SkillEffect(EffectType.DEFENSE_UP, 302, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # 30%
     ],
     stack_rule=StackRule.STACK,
 ))
@@ -286,10 +286,10 @@ _T_TRITON_LIKE = register_status(StatusDefinition(
 _T_THRUD_LIKE = register_status(StatusDefinition(
     id=8202, name="Test Hunger-like", default_duration=-1,
     effects=[
-        SkillEffect(EffectType.DAMAGE_UP,  401, TargetRule(TargetScope.SELF_INFANTRY), DURATION_PERM),  # +15% offense INF
-        SkillEffect(EffectType.DAMAGE_UP,  401, TargetRule(TargetScope.SELF_ARCHERS),  DURATION_PERM),  # +15% offense ARCH
-        SkillEffect(EffectType.DEFENSE_UP, 402, TargetRule(TargetScope.SELF_INFANTRY), DURATION_PERM),  # +15% defense INF
-        SkillEffect(EffectType.DEFENSE_UP, 402, TargetRule(TargetScope.SELF_ARCHERS),  DURATION_PERM),  # +15% defense ARCH
+        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_INFANTRY, DURATION_PERM),  # +15% offense INF
+        SkillEffect(EffectType.DAMAGE_UP,  401, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # +15% offense ARCH
+        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_INFANTRY, DURATION_PERM),  # +15% defense INF
+        SkillEffect(EffectType.DEFENSE_UP, 402, TargetScope.SELF_ARCHERS,  DURATION_PERM),  # +15% defense ARCH
     ],
     stack_rule=StackRule.STACK,
 ))

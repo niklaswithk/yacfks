@@ -175,7 +175,7 @@ class SkillEngine:
 
         att_side = context.attacking_side
         def_side = BattleSide.DEFENDER if att_side == BattleSide.ATTACKER else BattleSide.ATTACKER
-        scope = effect.target_rule.scope
+        scope = effect.scope
 
         # Resolve target side and troop type from scope
         if scope in _SELF_SCOPES:
@@ -300,7 +300,7 @@ class SkillEngine:
                 if value is None:
                     continue
 
-                scope = eff.target_rule.scope
+                scope = eff.scope
 
                 # Per-effect troop filter: use the effect's own specific-troop scope when present
                 # (e.g. SELF_INFANTRY → INF), falling back to the status's target_troop for
@@ -314,7 +314,9 @@ class SkillEngine:
                             numerator_ec.add(eff.effect_type, eff.effect_op, value)
                     elif scope in _ENEMY_SCOPES and status.target_side == def_side:
                         if troop_filter is None or troop_filter == target_type:
-                            numerator_ec.add(eff.effect_type, eff.effect_op, value)
+                            benefactor_troop = _SCOPE_TO_TROOP.get(eff.benefactor_scope) if eff.benefactor_scope else None
+                            if benefactor_troop is None or benefactor_troop == att_type:
+                                numerator_ec.add(eff.effect_type, eff.effect_op, value)
 
                 elif eff.effect_type in _DENOMINATOR_EFFECT_TYPES:
                     if scope in _SELF_SCOPES and status.target_side == def_side:
