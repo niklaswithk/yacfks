@@ -5,13 +5,12 @@ from yacfks.app.battle.battle_snapshot import BattleSnapshot
 from yacfks.app.battle.battle_result import BattleResult
 from yacfks.app.battle.damage.damage_calc import compute_kills
 from yacfks.app.battle.skills.skill_engine import SkillEngine
-from yacfks.app.battle.skills.skill_context import SkillContext
+from yacfks.app.battle.phase_context import PhaseContext
 from yacfks.app.battle.skills.enums import TriggerType
 from yacfks.app.domains.enums import BattleSide, TroopType
-from yacfks.app.domains.hero import HeroSkillSelection
+from yacfks.app.battle.skills.definitions import TroopSkillDefinition, HeroSkillSelection
 
 _TROOP_ORDER = [TroopType.INF, TroopType.CAV, TroopType.ARCH]
-_TARGET_PRIORITY = [TroopType.INF, TroopType.CAV, TroopType.ARCH]
 
 
 class BattleEngine:
@@ -20,14 +19,25 @@ class BattleEngine:
         self._skill_engine = SkillEngine()
 
     def run(self, context: BattleContext) -> BattleResult:
+        # init a battle state using battle context/setup, i.e. turn 1.
+        # for now, battle context is practically more or less frozen, while battle states and line states
+        # will hold changes throught the battle.
+        # im thinking about maybe merging battle context/state, but feels forced right now
         state = self._init_state(context)
 
-        # ALWAYS skills fire exactly once per battle: create permanent statuses now.
-        # These go directly into active_statuses.
-        self._apply_always_skills(context, state)
-
+        # STATIC skills fire once per battle — hero skills that write a permanent active effect.
+        self._apply_skills(TriggerType.STATIC, context, state)
+        
+        # snapshots will hold lots of goodies, like mini battle reports per turn(BattleSnapshot).
+        # one can iterate through them in a gui and see the flow of battle real-time.
+        # for now it only holds troop counts and turn count. 
+        # Can extend it later with effects from skills.
+        # togehter with battle context, which holds lots of static data like stats bonuses etc
+        # it can be made into a powerful visualiz<ton utility for damage formula, skills, flow of battle,
+        # how it all connects during an actual battle.
         snapshots: list[BattleSnapshot] = []
 
+        # main battle loop
         while True:
             self._run_turn(context, state)
             snapshots.append(self._snapshot(state))
@@ -49,44 +59,46 @@ class BattleEngine:
     # ── turn execution ────────────────────────────────────────────────────────
 
     def _run_turn(self, context: BattleContext, state: BattleState) -> None:
-        # TURN_START fires once per turn: evaluate hero skills for both sides.
-        # Results land in pending_statuses (i.e. skills with a N-turn delay) or active_statuses.
-        self._apply_turn_start_skills(context, state)
+        # TURN_START are per turn skills, fires once per turn for both sides.
+        # hero and regular troop skills write duration=1 active effects that expire 
+        # at turn end and are re-applied next turn.
+        self._apply_skills(TriggerType.TURN_START, context, state)
 
-        # Each side runs its 3 attack phases.
-        self._run_side_attacks(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
-        self._run_side_attacks(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
+        # Evaluate targeting for each side before their repsective attack phases run.
+        # the special Ambusher (CAV RETARGET) rolls in _compute_side_targets, so not per phase.
+        # MAAYBE targeting for both attacker and defender runs first as a set, before any sides' attack phases at all.
+        # but for now ill leave it like this, don't think there would be much difference..?
+        # also, evaluating and resolving targets once per beginning of turn, and locking them in, could have
+        # profound effects on skills like Petra Evil Eye, which is dynamic in nature with CURRENT_TARGET.
+        # i.e. when and where is CURRENT_TARGET resolvoed, and if/when  can it be re-evaled for CAV with Ambusher?
+        # For now ill do it like this, but might have to change it later so targeting is done per attack phase
+        att_targets = self._compute_side_targets(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
+        self._run_side_attacks(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER, att_targets)
+
+        def_targets = self._compute_side_targets(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
+        self._run_side_attacks(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER, def_targets)
 
         self._apply_losses(state)
         self._tick_statuses(state)
 
-    def _apply_always_skills(self, context: BattleContext, state: BattleState) -> None:
-        for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
-            skill_ctx = SkillContext(
-                battle_context=context,
-                battle_state=state,
-                attacking_side=side,
-                attacker_troop_type=None,
-                defender_troop_type=None,
-            )
-            self._skill_engine.collect_effects(
-                self._hero_skills_for_side(context, side), [],
-                TriggerType.ALWAYS, skill_ctx,
-            )
+    def _apply_skills(
+            self,
+            trigger: TriggerType,
+            context: BattleContext,
+            state: BattleState
+    ) -> None:
 
-    def _apply_turn_start_skills(self, context: BattleContext, state: BattleState) -> None:
         for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
-            skill_ctx = SkillContext(
+            phase_ctx = PhaseContext(
                 battle_context=context,
                 battle_state=state,
                 attacking_side=side,
                 attacker_troop_type=None,
                 defender_troop_type=None,
             )
-            self._skill_engine.collect_effects(
-                self._hero_skills_for_side(context, side), [],
-                TriggerType.TURN_START, skill_ctx,
-            )
+            hero_skills = self._hero_skills_for_side(context, side)
+            troop_skills = self._all_troop_skills_for_side(context, side)
+            self._skill_engine.evaluate_skills(hero_skills, troop_skills, trigger, phase_ctx)
 
     def _run_side_attacks(
         self,
@@ -94,59 +106,66 @@ class BattleEngine:
         state: BattleState,
         att_side: BattleSide,
         def_side: BattleSide,
+        targets: dict[TroopType, TroopType | None],
     ) -> None:
-        att_hero_skills = self._hero_skills_for_side(context, att_side)
-
+        
+        # get stats for current phase attacker
         att_final_stats = (
             context.attacker_final_stats if att_side == BattleSide.ATTACKER
             else context.defender_final_stats
         )
+
+        # # get stats for current phase defender
         def_final_stats = (
             context.defender_final_stats if att_side == BattleSide.ATTACKER
             else context.attacker_final_stats
         )
 
-        for att_type in _TROOP_ORDER:
-            att_line = state.get_line(att_side, att_type)
+        # attack phases ar a-go
+        for att_troop_type in _TROOP_ORDER:
+            # get current state of the troop type/ArmyLine about to attack
+            att_line = state.get_line(att_side, att_troop_type)
             if not att_line.is_alive:
                 continue
 
-            target_type = self._get_target(state, def_side)
-            if target_type is None:
+            # get current target for current attacking troop type
+            target_troop_type = targets[att_troop_type]
+            if target_troop_type is None:
                 break
 
-            troop_skills = self._troop_skills_for_line(context, att_side, att_type)
+            # get all hero skills for current phase attacker
+            # hero skill effects will be applied laeter
+            att_hero_skills = self._hero_skills_for_side(context, att_side)
 
-            skill_ctx = SkillContext(
+            # get troop skills from current troop type about to attack. 
+            # troop skill effects will be applied later
+            att_troop_skills = self._troop_skills_for_line(context, att_side, att_troop_type)
+
+            # create a phase context including the intial battle context/setup, current battle state,
+            # and more
+            phase_ctx = PhaseContext(
                 battle_context=context,
                 battle_state=state,
                 attacking_side=att_side,
-                attacker_troop_type=att_type,
-                defender_troop_type=target_type,
+                attacker_troop_type=att_troop_type,
+                defender_troop_type=target_troop_type,
             )
 
-            # Evaluate ATTACK-trigger hero skills and troop skills for the attacker.
-            # Hero skills producing statuses write to battle_state (context carries the state).
-            # Defender hero ATTACK skills fire when the defender's own _run_side_attacks runs,
-            # so we do NOT evaluate def_hero_skills here (attacking_side would be wrong).
-            phase_numerator_ec, _ = self._skill_engine.collect_effects(
-                att_hero_skills, troop_skills, TriggerType.ATTACK, skill_ctx
+            # evaluate troop skills and phase-based hero skills, in the current phase context
+            self._skill_engine.evaluate_skills(att_hero_skills, att_troop_skills, TriggerType.PHASE, phase_ctx)
+
+            # Route all active effects (hero + STATIC troop) from BattleState into phase ECs.
+            num_ec, den_ec = self._skill_engine.build_phase_ecs(
+                state.get_effects(att_side),
+                state.get_effects(def_side),
+                att_troop_type,
+                target_troop_type,
             )
 
-            # Status-derived effects: read from active_statuses for this exact phase
-            status_numerator_ec, status_denominator_ec = self._skill_engine.collect_phase_effects(
-                state.active_statuses,
-                att_side=att_side, att_type=att_type,
-                def_side=def_side, target_type=target_type,
-            )
+            skill_mod = self._skill_engine.compute_skill_mod(num_ec, den_ec)
 
-            merged_numerator = _merge(phase_numerator_ec, status_numerator_ec)
-            merged_denominator = _merge(status_denominator_ec)
-
-            skill_mod = self._skill_engine.compute_skill_mod(merged_numerator, merged_denominator)
-
-            att_stats = att_final_stats.get_final_stats(att_type)
-            def_stats = def_final_stats.get_final_stats(target_type)
+            att_stats = att_final_stats.get_final_stats(att_troop_type)
+            def_stats = def_final_stats.get_final_stats(target_troop_type)
 
             kills = compute_kills(
                 attacking_count=att_line.troop_count,
@@ -156,12 +175,53 @@ class BattleEngine:
                 skill_mod=skill_mod,
             )
 
-            state.get_line(def_side, target_type).pending_losses += kills
+            state.get_line(def_side, target_troop_type).pending_losses += kills
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
-    def _get_target(self, state: BattleState, def_side: BattleSide) -> TroopType | None:
-        for candidate in _TARGET_PRIORITY:
+    def _compute_side_targets(
+        self,
+        context: BattleContext,
+        state: BattleState,
+        phase_attacker: BattleSide,
+        phase_defender: BattleSide,
+    ) -> dict[TroopType, TroopType | None]:
+        """Pre-compute attack targets for all three troop types on one side.
+
+        Returns {att_type: target_type | None} where None means no valid target
+        (all enemies dead). CAV's target is determined after rolling the Ambusher
+        (RETARGET) skill so it's resolved exactly once, before any phase executes.
+        """
+        targets: dict[TroopType, TroopType | None] = {}
+        for att_type in _TROOP_ORDER:
+            if not state.get_line(phase_attacker, att_type).is_alive:
+                targets[att_type] = None
+                continue
+
+            target = self._get_default_target(state, phase_defender)
+
+            if att_type == TroopType.CAV and target is not None:
+                cav_skills = self._troop_skills_for_line(context, phase_attacker, TroopType.CAV)
+                # create a phase context with goodies for skills engine to evaluate Amubsher skill.
+                phase_ctx = PhaseContext(
+                    battle_context=context,
+                    battle_state=state,
+                    attacking_side=phase_attacker,
+                    attacker_troop_type=TroopType.CAV,
+                    defender_troop_type=target,
+                )
+                if self._skill_engine.collect_retarget(cav_skills, phase_ctx):
+                    arch_line = state.get_line(phase_defender, TroopType.ARCH)
+                    if arch_line.is_alive:
+                        target = TroopType.ARCH
+
+            # "targets" dict contains pairs of troop types for targeting, like INF vs INF, CAV vs ARCH etc.
+            #  e.g. Defender CAV will target Attacker ARCH, or Attacker ARCH will target DEFENDER Inf, etc
+            targets[att_type] = target
+        return targets
+
+    def _get_default_target(self, state: BattleState, def_side: BattleSide) -> TroopType | None:
+        for candidate in _TROOP_ORDER:
             if state.get_line(def_side, candidate).is_alive:
                 return candidate
         return None
@@ -174,19 +234,22 @@ class BattleEngine:
                 line.pending_losses = 0
 
     def _tick_statuses(self, state: BattleState) -> None:
-        # Pending enemy-scope statuses (curses etc.) become active for the next turn.
-        state.active_statuses.extend(state.pending_statuses)
-        state.pending_statuses = []
-
-        surviving = []
-        for status in state.active_statuses:
-            if status.remaining_turns == -1:  # permanent
-                surviving.append(status)
-                continue
-            status.remaining_turns -= 1
-            if status.remaining_turns > 0:
-                surviving.append(status)
-        state.active_statuses = surviving
+        for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
+            surviving = []
+            for ae in state.get_effects(side):
+                if ae.remaining_turns == -1:
+                    surviving.append(ae)
+                    continue
+                ae.remaining_turns -= 1
+                if ae.remaining_turns > 0:
+                    surviving.append(ae)
+            surviving.extend(state.get_effects(side, pending=True))
+            if side == BattleSide.ATTACKER:
+                state.attacker_active_effects = surviving
+                state.attacker_pending_effects = []
+            else:
+                state.defender_active_effects = surviving
+                state.defender_pending_effects = []
 
     def _snapshot(self, state: BattleState) -> BattleSnapshot:
         return BattleSnapshot(
@@ -229,8 +292,11 @@ class BattleEngine:
         )
 
     def _hero_skills_for_side(
-        self, context: BattleContext, side: BattleSide
+        self, 
+        context: BattleContext, 
+        side: BattleSide
     ) -> list[HeroSkillSelection]:
+        
         if side == BattleSide.ATTACKER:
             heroes = context.attacker_lead_heroes + context.attacker_joiner_heroes
         else:
@@ -239,19 +305,15 @@ class BattleEngine:
 
     def _troop_skills_for_line(
         self, context: BattleContext, side: BattleSide, troop_type: TroopType
-    ):
+    ) -> list[TroopSkillDefinition]:
         army = (
             context.attacker_army if side == BattleSide.ATTACKER else context.defender_army
         )
         return army.get_line(troop_type).troop_skills
 
-
-def _merge(*collections):
-    """Combine any number of EffectCollections into one (non-destructive)."""
-    from yacfks.app.battle.skills.effect_collection import EffectCollection
-    merged = EffectCollection()
-    for ec in collections:
-        for effect_type, ops in ec.effects.items():
-            for op, total in ops.items():
-                merged.add(effect_type, op, total)
-    return merged
+    def _all_troop_skills_for_side(self, context: BattleContext, side: BattleSide) -> list[TroopSkillDefinition]:
+        return [
+            skill
+            for troop_type in _TROOP_ORDER
+            for skill in self._troop_skills_for_line(context, side, troop_type)
+        ]

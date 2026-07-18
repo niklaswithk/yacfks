@@ -1,4 +1,5 @@
 import pytest
+from itertools import pairwise
 from yacfks.app.battle.battle_engine import BattleEngine
 from yacfks.app.battle.battle_setup import BattleContext
 from yacfks.app.domains.army import Army, ArmyLine
@@ -7,178 +8,139 @@ from yacfks.app.domains.enums import TroopType, BattleSide, StatsInputMode
 from yacfks.app.domains.stats import RawStatsBonuses
 from yacfks.app.domains.troop import TroopDefinition, TroopStack
 from yacfks.app.services.bonus_resolver import BonusResolver
+from yacfks.app.repos.troop_repo import get_troop
 from yacfks.app.repos.widget_repo import WidgetRepo
 
+# ── Engine (stateless — one instance for the whole module) ───────────────────
 
-# ── shared fixtures ───────────────────────────────────────────────────────────
+BE = BattleEngine()
 
-def _make_raw_stats(val: float = 1.0) -> RawStatsBonuses:
-    return RawStatsBonuses(attack=val, lethality=val, health=val, defense=val)
+# ── Short aliases ─────────────────────────────────────────────────────────────
 
+INF  = TroopType.INF
+CAV  = TroopType.CAV
+ARCH = TroopType.ARCH
+ATT  = BattleSide.ATTACKER
+DEF  = BattleSide.DEFENDER
 
-def _make_troop(troop_type: TroopType, attack: float, health: float, skills=None) -> TroopDefinition:
+# ── Base stats by troop type (attack, health) ─────────────────────────────────
+
+_BASE_STATS: dict[TroopType, tuple[float, float]] = {
+    INF:  (243, 730),
+    CAV:  (730, 243),
+    ARCH: (974, 183),
+}
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _troop(troop_type: TroopType, skills: list | None = None) -> TroopDefinition:
+    atk, hp = _BASE_STATS[troop_type]
     return TroopDefinition(
-        troop_type=troop_type,
-        tier_major=6, tier_minor=0,
-        base_attack=attack, base_lethality=10,
-        base_health=health, base_defense=10,
+        troop_type=troop_type, tier_major=6, tier_minor=0,
+        base_attack=atk, base_lethality=10,
+        base_health=hp,  base_defense=10,
         skills=skills or [],
     )
 
 
-def _make_army(count: int, troop_type: TroopType = TroopType.INF) -> Army:
-    """Single-troop-type army with minimal placeholder lines for the other two types."""
-    inf_def = _make_troop(TroopType.INF, attack=243, health=730)
-    cav_def = _make_troop(TroopType.CAV, attack=730, health=243)
-    arch_def = _make_troop(TroopType.ARCH, attack=974, health=183)
-
-    def line(td: TroopDefinition, n: int):
-        return ArmyLine.from_stacks(td.troop_type, [TroopStack(td, n)])
-
-    if troop_type == TroopType.INF:
-        return Army(
-            infantry_line=line(inf_def, count),
-            cavalry_line=line(cav_def, 1),
-            archer_line=line(arch_def, 1),
-        )
-    elif troop_type == TroopType.CAV:
-        return Army(
-            infantry_line=line(inf_def, 1),
-            cavalry_line=line(cav_def, count),
-            archer_line=line(arch_def, 1),
-        )
-    else:
-        return Army(
-            infantry_line=line(inf_def, 1),
-            cavalry_line=line(cav_def, 1),
-            archer_line=line(arch_def, count),
-        )
-
-
-def _make_config(army: Army, side: BattleSide) -> ArmyConfiguration:
-    return ArmyConfiguration(
-        stats_mode=StatsInputMode.RALLY_REPORT,
-        battle_side=side,
-        army=army,
-        inf_raw_stats_bonuses=_make_raw_stats(),
-        cav_raw_stats_bonuses=_make_raw_stats(),
-        arch_raw_stats_bonuses=_make_raw_stats(),
-        leader_heroes=[],
-        joiner_heroes=[],
+def _army(count: int, troop_type: TroopType = INF) -> Army:
+    """Single-troop-type army; other two lines hold one placeholder troop each."""
+    counts  = {t: (count if t == troop_type else 1) for t in TroopType}
+    troops  = {t: _troop(t) for t in TroopType}
+    return Army(
+        infantry_line=ArmyLine.from_stacks(INF,  [TroopStack(troops[INF],  counts[INF])]),
+        cavalry_line =ArmyLine.from_stacks(CAV,  [TroopStack(troops[CAV],  counts[CAV])]),
+        archer_line  =ArmyLine.from_stacks(ARCH, [TroopStack(troops[ARCH], counts[ARCH])]),
     )
 
 
-def _make_context(att_army: Army, def_army: Army) -> BattleContext:
-    resolver = BonusResolver(WidgetRepo())
-    att_cfg = _make_config(att_army, BattleSide.ATTACKER)
-    def_cfg = _make_config(def_army, BattleSide.DEFENDER)
-    return BattleContext.from_army_configs(att_cfg, def_cfg, resolver)
+def _ctx(att_army: Army, def_army: Army) -> BattleContext:
+    raw = RawStatsBonuses(attack=1.0, lethality=1.0, health=1.0, defense=1.0)
+
+    def cfg(army: Army, side: BattleSide) -> ArmyConfiguration:
+        return ArmyConfiguration(
+            stats_mode=StatsInputMode.RALLY_REPORT,
+            battle_side=side, army=army,
+            inf_raw_stats_bonuses=raw, cav_raw_stats_bonuses=raw, arch_raw_stats_bonuses=raw,
+            leader_heroes=[], joiner_heroes=[],
+        )
+
+    return BattleContext.from_army_configs(cfg(att_army, ATT), cfg(def_army, DEF), BonusResolver(WidgetRepo()))
 
 
-# ── basic battle termination ──────────────────────────────────────────────────
+def run(att_count: int, def_count: int, troop_type: TroopType = INF):
+    return BE.run(_ctx(_army(att_count, troop_type), _army(def_count, troop_type)))
+
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
 
 class TestBattleTermination:
 
     def test_battle_produces_a_result(self):
-        ctx = _make_context(_make_army(10000), _make_army(5000))
-        result = BattleEngine().run(ctx)
-        assert result is not None
+        assert run(10_000, 5_000) is not None
 
     def test_stronger_side_wins(self):
-        # Attacker has 3× more infantry — should win
-        ctx = _make_context(_make_army(30000), _make_army(10000))
-        result = BattleEngine().run(ctx)
-        assert result.winner == "attacker"
+        assert run(30_000, 10_000).winner == "attacker"
 
     def test_weaker_side_loses(self):
-        ctx = _make_context(_make_army(5000), _make_army(30000))
-        result = BattleEngine().run(ctx)
-        assert result.winner == "defender"
+        assert run(5_000, 30_000).winner == "defender"
 
     def test_winner_has_troops_remaining(self):
-        ctx = _make_context(_make_army(30000), _make_army(10000))
-        result = BattleEngine().run(ctx)
+        result = run(30_000, 10_000)
         assert result.attacker_remaining > 0
         assert result.defender_remaining == 0
 
     def test_loser_has_no_troops_remaining(self):
-        ctx = _make_context(_make_army(5000), _make_army(30000))
-        result = BattleEngine().run(ctx)
+        result = run(5_000, 30_000)
         assert result.attacker_remaining == 0
 
     def test_battle_takes_at_least_one_turn(self):
-        ctx = _make_context(_make_army(10000), _make_army(5000))
-        result = BattleEngine().run(ctx)
-        assert result.turns >= 1
+        assert run(10_000, 5_000).turns >= 1
 
-
-# ── snapshots ─────────────────────────────────────────────────────────────────
 
 class TestSnapshots:
 
     def test_snapshot_count_matches_turns(self):
-        ctx = _make_context(_make_army(10000), _make_army(5000))
-        result = BattleEngine().run(ctx)
+        result = run(10_000, 5_000)
         assert len(result.snapshots) == result.turns
 
-    def test_snapshots_have_decreasing_total_troops(self):
-        ctx = _make_context(_make_army(10000), _make_army(10000))
-        result = BattleEngine().run(ctx)
+    def test_total_troops_never_increase_turn_over_turn(self):
+        result = run(10_000, 10_000)
         totals = [
             s.attacker_inf + s.attacker_cav + s.attacker_arch
             + s.defender_inf + s.defender_cav + s.defender_arch
             for s in result.snapshots
         ]
-        # Each turn must reduce or maintain total (never increase)
-        for i in range(1, len(totals)):
-            assert totals[i] <= totals[i - 1]
+        for turn, (a, b) in enumerate(pairwise(totals), 2):
+            assert b <= a, f"Total troops increased at turn {turn}"
 
-    def test_final_snapshot_reflects_result(self):
-        ctx = _make_context(_make_army(30000), _make_army(5000))
-        result = BattleEngine().run(ctx)
+    def test_final_snapshot_matches_result_survivors(self):
+        result = run(30_000, 5_000)
         last = result.snapshots[-1]
-        assert (
-            last.defender_inf + last.defender_cav + last.defender_arch == result.defender_remaining
-        )
+        assert last.defender_inf + last.defender_cav + last.defender_arch == result.defender_remaining
 
-
-# ── targeting ─────────────────────────────────────────────────────────────────
 
 class TestTargeting:
 
-    def test_attacking_infantry_targets_opposing_infantry_first(self):
-        # Both sides have all three troop types. After the battle, the loser's
-        # infantry should be reduced to 0 before cavalry, since INF is targeted first.
-        ctx = _make_context(_make_army(50000, TroopType.INF), _make_army(5000, TroopType.INF))
-        result = BattleEngine().run(ctx)
-        # Defender had far fewer inf; they should be gone
+    def test_infantry_targets_opposing_infantry_first(self):
+        # INF is the default target — with a huge att advantage, defender INF is wiped
+        result = run(50_000, 5_000)
         assert result.defender_remaining == 0
 
 
-# ── troop skills integration ──────────────────────────────────────────────────
-
 class TestTroopSkills:
 
-    def test_troop_with_damage_up_skill_wins_more_easily(self):
-        from yacfks.app.repos.troop_repo import get_troop
+    def test_army_with_troop_skill_outlasts_skillless_army(self):
+        # T6 INF has Anti-Cavalry Charge (STATIC TROOP_DAMAGE_UP); T5 INF has no skill
+        t6 = get_troop(INF, 6)
+        t5 = get_troop(INF, 5)
 
-        # One army uses T6 INF (has +15% TROOP_DAMAGE_UP), the other uses T5 INF (no skill)
-        t6 = get_troop(TroopType.INF, 6)
-        t5 = get_troop(TroopType.INF, 5)
-
-        cav_def = _make_troop(TroopType.CAV, attack=730, health=243)
-        arch_def = _make_troop(TroopType.ARCH, attack=974, health=183)
-
-        def make_mixed_army(inf_def: TroopDefinition) -> Army:
+        def _army_with_inf(inf_def: TroopDefinition) -> Army:
             return Army(
-                infantry_line=ArmyLine.from_stacks(TroopType.INF, [TroopStack(inf_def, 10000)]),
-                cavalry_line=ArmyLine.from_stacks(TroopType.CAV, [TroopStack(cav_def, 1)]),
-                archer_line=ArmyLine.from_stacks(TroopType.ARCH, [TroopStack(arch_def, 1)]),
+                infantry_line=ArmyLine.from_stacks(INF,  [TroopStack(inf_def,   10_000)]),
+                cavalry_line =ArmyLine.from_stacks(CAV,  [TroopStack(_troop(CAV),  1)]),
+                archer_line  =ArmyLine.from_stacks(ARCH, [TroopStack(_troop(ARCH), 1)]),
             )
 
-        # Attacker uses T6 (with skill), defender uses T5 (no skill), same count
-        ctx = _make_context(make_mixed_army(t6), make_mixed_army(t5))
-        result = BattleEngine().run(ctx)
-
-        # T6 with skill should outlast T5 without skill, even at same count
+        result = BE.run(_ctx(_army_with_inf(t6), _army_with_inf(t5)))
         assert result.winner == "attacker"

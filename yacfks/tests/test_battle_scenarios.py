@@ -5,15 +5,14 @@ Stats come from real rally battle reports (RALLY_REPORT mode), so all bonuses �
 widgets, pets, etc. — are already baked in. Percentage inputs like "486.4%"
 mean +486.4%, i.e. a multiplier of 1 + 4.864 = 5.864; use pct() to convert.
 
-Community sim reference values are noted in comments. Small numeric divergences
-(typically < 500 troops) are expected due to rounding differences in the kill
-formula. Exact match on winner, defender_remaining, and troop types that took
-no losses (CAV / ARCH in scenario 1).
+kingshotsimulator.com reference values are noted in comments. 
+Small numeric divergences are expected most likely beacuse of rounding differences. floats can be tricky
 
 Add new scenarios below; keep each scenario in its own class.
 """
 
 import pytest
+from itertools import pairwise
 from yacfks.app.battle.battle_engine import BattleEngine
 from yacfks.app.battle.battle_setup import BattleContext
 from yacfks.app.domains.army import Army, ArmyLine
@@ -55,7 +54,10 @@ def make_cfg(
     inf_stats / cav_stats / arch_stats: (attack%, lethality%, health%, defense%)
     All values are percentage bonuses; pct() is applied internally.
     """
-    def raw(t): return RawStatsBonuses(attack=pct(t[0]), lethality=pct(t[1]), health=pct(t[2]), defense=pct(t[3]))
+
+    def raw(t): 
+        return RawStatsBonuses(attack=pct(t[0]), lethality=pct(t[1]), health=pct(t[2]), defense=pct(t[3]))
+    
     return ArmyConfiguration(
         stats_mode=StatsInputMode.RALLY_REPORT,
         battle_side=side,
@@ -73,7 +75,7 @@ def run_battle(att_cfg: ArmyConfiguration, def_cfg: ArmyConfiguration):
     return BattleEngine().run(ctx)
 
 
-# ── Scenario 1: T6 infantry-heavy, 2 Chenko 2 Amane vs 3 Saul 1 Hilde ───────
+# ── Scenario 1: T6 troops only, 2 Chenko 2 Amane vs 3 Saul 1 Hilde ───────
 #
 # Attacker: 50k INF / 20k CAV / 30k ARCH
 #   Joiners: 2× Chenko L5 (DamageUp op=101 +25%), 2× Amane L5 (DamageUp op=102 +25%)
@@ -84,8 +86,8 @@ def run_battle(att_cfg: ArmyConfiguration, def_cfg: ArmyConfiguration):
 #   Denominator (vs attacker): (1.40) × (1.45) = 2.03   →  SkillMod att=2.25/2.03≈1.108
 #   Numerator (vs defender):   1.15               →  SkillMod def=1.15/1.00=1.15
 #
-# Community sim: attacker wins, 26 018 INF / 20 000 CAV / 30 000 ARCH survive.
-# Our sim:       attacker wins, 25 944 INF / 20 000 CAV / 30 000 ARCH survive.
+# kingshotsimulator.com: attacker wins, 26 018 INF / 20 000 CAV / 30 000 ARCH survive.
+# yacfks:       attacker wins, 25 944 INF / 20 000 CAV / 30 000 ARCH survive.
 # Δ = 74 INF (~0.3%) — expected rounding difference.
 
 _S1_ATT_INF  = (486.4, 412.5, 412.5, 671.5)
@@ -165,10 +167,93 @@ class TestScenario1:
 
     def test_attacker_inf_count_never_increases(self, result):
         counts = [s.attacker_inf for s in result.snapshots]
-        for i in range(1, len(counts)):
-            assert counts[i] <= counts[i - 1], f"ATT INF increased at turn {i+1}"
+        for turn, (a, b) in enumerate(pairwise(counts), 2):
+            assert b <= a, f"ATT INF increased at turn {turn}"
 
     def test_defender_total_never_increases(self, result):
         totals = [s.defender_inf + s.defender_cav + s.defender_arch for s in result.snapshots]
-        for i in range(1, len(totals)):
-            assert totals[i] <= totals[i - 1], f"DEF total increased at turn {i+1}"
+        for turn, (a, b) in enumerate(pairwise(totals), 2):
+            assert b <= a, f"DEF total increased at turn {turn}"
+
+
+# ── Scenario 2: T6 only, no heroes — simple baseline ──────────────────────
+#
+# Attacker: 55k INF / 20k CAV / 30k ARCH  (no heroes)
+# Defender: 60k INF / 20k CAV / 20k ARCH  (no heroes)
+# army_min = 100 000
+#
+# kingshotsimulator.com: attacker wins, 27 842 INF / 20 000 CAV / 30 000 ARCH
+#   survive (total 77 842).
+# yacfks: 27 756 INF / 20 000 CAV / 30 000 ARCH (total 77 756).
+# Δ = 86 INF (~0.3%) — same systematic rounding offset seen in Scenario 1 (Δ=74).
+
+_S2_ATT_INF  = (597.6, 386.7, 413.9, 573.1)
+_S2_ATT_CAV  = (486.5, 327.6, 271.2, 476.2)
+_S2_ATT_ARCH = (510.8, 374.6, 300.3, 494.6)
+
+_S2_DEF_INF  = (472.8, 362.3, 429.4, 330.4)
+_S2_DEF_CAV  = (489.7, 253.0, 439.8, 313.5)
+_S2_DEF_ARCH = (412.0, 245.8, 356.8, 295.6)
+
+
+class TestScenario2:
+
+    @pytest.fixture(scope="class")
+    def result(self):
+        att_cfg = make_cfg(
+            army=make_army(55_000, 20_000, 30_000),
+            side=BattleSide.ATTACKER,
+            inf_stats=_S2_ATT_INF, cav_stats=_S2_ATT_CAV, arch_stats=_S2_ATT_ARCH,
+        )
+        def_cfg = make_cfg(
+            army=make_army(60_000, 20_000, 20_000),
+            side=BattleSide.DEFENDER,
+            inf_stats=_S2_DEF_INF, cav_stats=_S2_DEF_CAV, arch_stats=_S2_DEF_ARCH,
+        )
+        return run_battle(att_cfg, def_cfg)
+
+    # ── qualitative outcome ───────────────────────────────────────────────────
+
+    def test_attacker_wins(self, result):
+        assert result.winner == "attacker"
+
+    def test_defender_fully_eliminated(self, result):
+        assert result.defender_remaining == 0
+
+    # ── attacker survivors ────────────────────────────────────────────────────
+
+    def test_attacker_cav_took_no_losses(self, result):
+        assert result.snapshots[-1].attacker_cav == 20_000
+
+    def test_attacker_arch_took_no_losses(self, result):
+        assert result.snapshots[-1].attacker_arch == 30_000
+
+    def test_attacker_inf_survivors_within_expected_range(self, result):
+        # Community sim: 27 842. Our sim: 27 756 (Δ=86, ~0.3% rounding offset).
+        inf = result.snapshots[-1].attacker_inf
+        assert 26_000 <= inf <= 29_000, f"ATT INF survivors out of expected range: {inf}"
+
+    def test_attacker_total_survivors(self, result):
+        # Community sim total: 77 842. Our sim: 77 756.
+        total = result.attacker_remaining
+        assert 75_000 <= total <= 80_000, f"ATT total survivors out of expected range: {total}"
+
+    # ── turn count sanity ─────────────────────────────────────────────────────
+
+    def test_battle_ends_in_expected_turns(self, result):
+        assert 35 <= result.turns <= 45, f"Battle turn count unexpected: {result.turns}"
+
+    def test_snapshot_count_matches_turns(self, result):
+        assert len(result.snapshots) == result.turns
+
+    # ── per-turn monotonicity ─────────────────────────────────────────────────
+
+    def test_attacker_inf_count_never_increases(self, result):
+        counts = [s.attacker_inf for s in result.snapshots]
+        for turn, (a, b) in enumerate(pairwise(counts), 2):
+            assert b <= a, f"ATT INF increased at turn {turn}"
+
+    def test_defender_total_never_increases(self, result):
+        totals = [s.defender_inf + s.defender_cav + s.defender_arch for s in result.snapshots]
+        for turn, (a, b) in enumerate(pairwise(totals), 2):
+            assert b <= a, f"DEF total increased at turn {turn}"

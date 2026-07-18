@@ -2,7 +2,7 @@ import math
 from yacfks.app.domains.stats import EffectiveFinalStats
 from yacfks.app.services.formulas import troop_factor, offensive_factor, defensive_factor
 
-
+# might move this to battle engine
 def compute_kills(
     attacking_count: int,
     army_min: int,
@@ -11,9 +11,9 @@ def compute_kills(
     skill_mod: float = 1.0,
 ) -> int:
     """
-    Kills = √(attacking_count × army_min) × (attacking_attack × attacking_lethality / 100)
-            / (defending_health × defending_defense / 100)
-            × skill_mod
+    Kills = √(attacking_count x army_min) x (attacking_attack x attacking_lethality / 100)
+            / (defending_health x defending_defense / 100)
+            x skill_mod
 
     Parameters:
       attacking_count: Current troop count of the side doing damage

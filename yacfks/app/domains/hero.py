@@ -1,11 +1,7 @@
-from __future__ import annotations
 from dataclasses import dataclass, field
 from yacfks.app.domains.enums import TroopType
 from yacfks.app.domains.widget import WidgetDefinition
-from yacfks.app.battle.skills.enums import TriggerType
-from yacfks.app.battle.skills.definitions import SkillLevelData
-from yacfks.app.battle.skills.statuses import StatusApplication
-from yacfks.app.battle.skills.conditions import SkillCondition
+from yacfks.app.battle.skills.definitions import HeroSkillSelection
 
 
 @dataclass(frozen=True)
@@ -20,20 +16,4 @@ class HeroDefinition:
 class HeroSelection:
     hero: HeroDefinition
     widget_level: int = 0
-    skills: list["HeroSkillSelection"] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class HeroSkillDefinition:
-    id: int
-    name: str
-    trigger: TriggerType
-    status_applications: list[StatusApplication]
-    conditions: list[SkillCondition]
-    level_data: dict[int, SkillLevelData] | None = None
-
-
-@dataclass
-class HeroSkillSelection:
-    definition: HeroSkillDefinition
-    level: int
+    skills: list[HeroSkillSelection] = field(default_factory=list)

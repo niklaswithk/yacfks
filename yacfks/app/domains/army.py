@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from collections import defaultdict
 from yacfks.app.domains.troop import TroopStack
 from yacfks.app.domains.enums import TroopType
-from yacfks.app.domains.troop import TroopSkill
+from yacfks.app.battle.skills.definitions import TroopSkillDefinition
 from yacfks.app.domains.stats import EffectiveBaseStats
 import math
 
@@ -26,8 +26,8 @@ class ArmyLine:
         return self.troop_count > 0
     
     @property
-    def troop_skills(self) -> list[TroopSkill]:
-        skills: dict[int, TroopSkill] = {}
+    def troop_skills(self) -> list[TroopSkillDefinition]:
+        skills: dict[int, TroopSkillDefinition] = {}
 
         #loop all troop stacks in ArmyLine, and for each skill add the SkillDef to skills dict aboceve, 
         # going by skill id. This way we don't get duplicate skills, if one skill appears more than once
@@ -187,6 +187,7 @@ class Army:
         return self.archer_line.troop_count
 
     # put an alive check for whole army too, will prob be useful :)
+    # on second thought, BattleLineState now tracks this, so can prob be removed...some day..
     @property
     def is_alive(self) -> bool:
         return self.total_troop_count > 0

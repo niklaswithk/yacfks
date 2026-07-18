@@ -1,18 +1,20 @@
 from enum import Enum
 
 class TriggerType(Enum):
-    ALWAYS = "always"
+    # Static are skills like Tri-Phalanx etc, static modifiers that are actiavgted once per battle
+    STATIC = "static"
+    # turn-based skills, for every turn
     TURN_START = "turn_start"
-    TURN_END = "turn_end"
-    PHASE_START = "phase_start"
-    PHASE_END = "phase_end"
-    ATTACK = "attack"
+    # phase based skills, for every troop type attack phase
+    PHASE = "phase"
+    # for speical troop skills ambusher and volley
+    TROOP_SPECIAL = "troop_special"
+    
 
 class StackRule(Enum):
     STACK = "stack"
-    REFRESH = "refresh"
-    UNIQUE = "unique"
-    REPLACE = "replace"
+    REFRESH = "refresh" # problematic, and hypothetical only. might remove
+    UNIQUE = "unique" # there can be onlu one!
 
 
 class EffectType(Enum):
@@ -20,10 +22,14 @@ class EffectType(Enum):
     DEFENSE_UP = "DefenseUp"
     OPP_DEFENSE_DOWN = "OppDefenseDown"
     OPP_DAMAGE_DOWN = "OppDamageDown"
+
+    # assume these effect_types for troop skills
     TROOP_DAMAGE_UP = "TroopDamageUp"
     TROOP_DEFENSE_UP = "TroopDefenseUp"
 
+    # special troop skills, ambusher and volley
     RETARGET = "retarget"
+    EXTRA_ATTACK_PHASE = "extra_attack_phase"
     # are these a thing?:
     # TROOPOPPDMGDOWN = "TroopOppDamageDown"
     # TROOPOPPDEFDOWN = "TroopOppDefenseDown"
@@ -41,9 +47,11 @@ class TargetScope(Enum):
     ENEMY_INFANTRY      = "enemy_infantry"
     ENEMY_CAVALRY       = "enemy_cavalry"
     ENEMY_ARCHERS       = "enemy_archers"
-    CURRENT_TARGET      = "current_target"       # whichever enemy line is currently targeted
-    RANDOM_ENEMY_LINE   = "random_enemy_line"    # randomly selected enemy troop type
 
-    # Status-chain targeting (for skills that affect the host of an existing status)
-    ATTACKER_OF_STATUS_TARGET = "attacker_of_status_target"
-    DEFENDER_OF_STATUS_TARGET = "defender_of_status_target"
+    # dynamic targeting
+    CURRENT_TARGET      = "current_target"       # whichever enemy line is currently targeted
+    RANDOM_ENEMY_LINE   = "random_enemy_line"    # randomly selected enemy troop type, prob doesnt appear in-game, but i'll leave it here if one ewants to try it out
+
+
+    # ATTACKER_OF_STATUS_TARGET = "attacker_of_status_target"
+    # DEFENDER_OF_STATUS_TARGET = "defender_of_status_target"

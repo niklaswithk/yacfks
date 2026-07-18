@@ -1,7 +1,7 @@
-from __future__ import annotations
+# from __future__ import annotations
 from dataclasses import dataclass, field
 from yacfks.app.battle.battle_line_state import BattleLineState
-from yacfks.app.battle.skills.statuses import ActiveStatus
+from yacfks.app.battle.skills.statuses import ActiveEffect
 from yacfks.app.domains.enums import BattleSide, TroopType
 
 
@@ -17,8 +17,15 @@ class BattleState:
     defender_arch: BattleLineState
 
     turn: int = 1
-    active_statuses: list[ActiveStatus] = field(default_factory=list)
-    pending_statuses: list[ActiveStatus] = field(default_factory=list)  # applied this turn, active from next
+    attacker_active_effects:  list[ActiveEffect] = field(default_factory=list)
+    attacker_pending_effects: list[ActiveEffect] = field(default_factory=list)
+    defender_active_effects:  list[ActiveEffect] = field(default_factory=list)
+    defender_pending_effects: list[ActiveEffect] = field(default_factory=list)
+
+    def get_effects(self, side: BattleSide, *, pending: bool = False) -> list[ActiveEffect]:
+        if side == BattleSide.ATTACKER:
+            return self.attacker_pending_effects if pending else self.attacker_active_effects
+        return self.defender_pending_effects if pending else self.defender_active_effects
 
     def get_line(self, side: BattleSide, troop_type: TroopType) -> BattleLineState:
         if side == BattleSide.ATTACKER:
