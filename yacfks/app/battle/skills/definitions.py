@@ -10,15 +10,14 @@ class EffectSpec:
     """Effect descriptor for both hero and troop skills.
 
     target_scope: ENEMY_* scope (or CURRENT_TARGET / RANDOM_ENEMY_LINE) — which enemy troop
-    type this effect targets. Troop skills use ENEMY_* here to encode which enemy type they
-    counter (e.g. ENEMY_CAVALRY for INF Master Brawler).
+    type this effect targets.
 
     benefactor_scope: SELF_* scope (or None = all own troops) — which of the owner's troop
     types benefits from the effect. Used by build_phase_ecs to filter per attack phase.
     """
     effect_type:      EffectType
     effect_op:        int
-    target_scope:     TargetScope
+    target_scope:     TargetScope | None = None
     benefactor_scope: TargetScope | None = None
     duration:         int = -1
     apply_delay:      int = 0
@@ -30,6 +29,7 @@ class SkillLevelData:
     skill_id: int
     level: int
     values: dict[int, float]
+    chance: float | None = None  # overrides RandomChanceCondition.chance when set
 
 
 # ── Skill definitions ─────────────────────────────────────────────────────────

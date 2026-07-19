@@ -69,15 +69,14 @@ class SkillEngine:
         context: PhaseContext | None,
         rng_fn,
     ) -> None:
-        
         if skill_def.trigger != trigger:
-            return
-        if not self._check_conditions(skill_def.conditions, context, rng_fn):
             return
         if skill_def.level_data is None:
             return
         level_entry = skill_def.level_data.get(level)
         if level_entry is None:
+            return
+        if not self._check_conditions(skill_def.conditions, context, rng_fn, level_entry):
             return
         for spec in skill_def.effects:
             self._apply_effect(spec, skill_def.id, level_entry, context, rng_fn)
@@ -107,7 +106,9 @@ class SkillEngine:
                 return
             target_troop = live[int(rng_fn() * len(live))]
         else:
-            target_troop = _SCOPE_TO_TROOP.get(scope)  # 'None' defaults to ENEMY_ARMY; specific type for ENEMY_*/SELF_*
+            # None or ENEMY_ARMY → target_troop=None (applies to any enemy)
+            # specific scopes resolve to TroopType
+            target_troop = _SCOPE_TO_TROOP.get(scope) if scope is not None else None
 
         value = level_entry.values.get(spec.effect_op)
         if value is None:
@@ -172,13 +173,20 @@ class SkillEngine:
         else:
             state.get_effects(host_side, pending=True).append(new_effect)
 
-    def _check_conditions(self, conditions, context: PhaseContext | None, rng_fn) -> bool:
+    def _check_conditions(self, conditions, context: PhaseContext | None, rng_fn, level_entry=None) -> bool:
         """
         Handle skill effect conditions, like RNG, troop types required etc.
         """
         for condition in conditions:
             if isinstance(condition, RandomChanceCondition):
-                if rng_fn() >= condition.chance:
+                # first try to get trigger chance value from skill level, if there is one present.
+                # else, we expect it to be in RandomChanceCondition.chance instance var.
+                chance = (
+                    level_entry.chance
+                    if level_entry is not None and level_entry.chance is not None
+                    else condition.chance
+                )
+                if chance is None or rng_fn() >= chance:
                     return False
             elif isinstance(condition, RequiresTargetTroopType):
                 if context is None or context.defender_troop_type is None:

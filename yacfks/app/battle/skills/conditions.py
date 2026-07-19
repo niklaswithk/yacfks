@@ -9,8 +9,12 @@ class SkillCondition:
 
 @dataclass(frozen=True)
 class RandomChanceCondition(SkillCondition):
-    """Skill fires only when rng_fn() < chance. Range: [0.0, 1.0]."""
-    chance: float
+    """Skill fires only when rng_fn() < chance. Range: [0.0, 1.0].
+
+    Set chance=None when the trigger probability scales with skill level;
+    in that case SkillLevelData.chance must be set for every level entry.
+    """
+    chance: float | None = None
 
 
 @dataclass(frozen=True)
