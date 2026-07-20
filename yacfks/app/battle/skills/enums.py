@@ -7,6 +7,8 @@ class TriggerType(Enum):
     TURN_START = "turn_start"
     # phase based skills, for every troop type attack phase
     PHASE = "phase"
+    # per-troop-type roll at turn start, after targeting — e.g. Petra Evil Eye
+    TURN_START_PER_TROOP = "turn_start_per_troop"
     # for speical troop skills ambusher and volley
     TROOP_SPECIAL = "troop_special"
     

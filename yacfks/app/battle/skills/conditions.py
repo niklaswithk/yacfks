@@ -27,3 +27,12 @@ class RequiresFriendlyTroopType(SkillCondition):
 class RequiresTargetTroopType(SkillCondition):
     """Skill only activates when the current attack target is of this troop type."""
     troop_type: TroopType
+
+
+@dataclass(frozen=True)
+class RequiresMinTurn(SkillCondition):
+    """Skill does not evaluate before battle turn reaches min_turn.
+
+    Use min_turn=2 for skills that skip turn 1 (e.g. Petra Evil Eye).
+    """
+    min_turn: int

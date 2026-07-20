@@ -73,10 +73,15 @@ class BattleEngine:
         # i.e. when and where is CURRENT_TARGET resolvoed, and if/when  can it be re-evaled for CAV with Ambusher?
         # For now ill do it like this, but might have to change it later so targeting is done per attack phase
         att_targets = self._compute_side_targets(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
-        self._run_side_attacks(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER, att_targets)
+        # collect and evaluate skills that runs at start of per turn but per present troop type
+        self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.ATTACKER, att_targets)
+        # _run_attack_phases also collects and evaluates skills that trigger per attack phase, which is SORT of like
+        # TURN_START_PER_TROOP but not really.
+        self._run_attack_phases(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER, att_targets)
 
         def_targets = self._compute_side_targets(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
-        self._run_side_attacks(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER, def_targets)
+        self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.DEFENDER, def_targets)
+        self._run_attack_phases(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER, def_targets)
 
         self._apply_losses(state)
         self._tick_statuses(state)
@@ -100,7 +105,7 @@ class BattleEngine:
             troop_skills = self._all_troop_skills_for_side(context, side)
             self._skill_engine.evaluate_skills(hero_skills, troop_skills, trigger, phase_ctx)
 
-    def _run_side_attacks(
+    def _run_attack_phases(
         self,
         context: BattleContext,
         state: BattleState,
@@ -154,10 +159,12 @@ class BattleEngine:
             # evaluate troop skills and phase-based hero skills, in the current phase context
             self._skill_engine.evaluate_skills(att_hero_skills, att_troop_skills, TriggerType.PHASE, phase_ctx)
 
-            # Route all active effects (hero + STATIC troop) from BattleState into phase ECs.
+            # Route all active effects from BattleState into phase ECs.
             num_ec, den_ec = self._skill_engine.build_phase_ecs(
                 state.get_effects(att_side),
                 state.get_effects(def_side),
+                state.get_statuses(att_side),
+                state.get_statuses(def_side),
                 att_troop_type,
                 target_troop_type,
             )
@@ -233,23 +240,57 @@ class BattleEngine:
                 line.troop_count = max(0, line.troop_count - line.pending_losses)
                 line.pending_losses = 0
 
+    def _apply_skills_per_troop(
+        self,
+        trigger: TriggerType,
+        context: BattleContext,
+        state: BattleState,
+        side: BattleSide,
+        targets: dict[TroopType, TroopType | None],
+    ) -> None:
+        hero_skills = self._hero_skills_for_side(context, side)
+        troop_skills = self._all_troop_skills_for_side(context, side)
+        for att_type in _TROOP_ORDER:
+            if not state.get_line(side, att_type).is_alive:
+                continue
+            phase_ctx = PhaseContext(
+                battle_context=context,
+                battle_state=state,
+                attacking_side=side,
+                attacker_troop_type=att_type,
+                defender_troop_type=targets.get(att_type),
+            )
+            self._skill_engine.evaluate_skills(hero_skills, troop_skills, trigger, phase_ctx)
+
     def _tick_statuses(self, state: BattleState) -> None:
         for side in (BattleSide.ATTACKER, BattleSide.DEFENDER):
-            surviving = []
+            surviving_effects = []
             for ae in state.get_effects(side):
                 if ae.remaining_turns == -1:
-                    surviving.append(ae)
+                    surviving_effects.append(ae)
                     continue
                 ae.remaining_turns -= 1
                 if ae.remaining_turns > 0:
-                    surviving.append(ae)
-            surviving.extend(state.get_effects(side, pending=True))
+                    surviving_effects.append(ae)
+            surviving_effects.extend(state.get_effects(side, pending=True))
+
+            surviving_statuses = []
+            for s in state.get_statuses(side):
+                s.remaining_turns -= 1
+                if s.remaining_turns > 0:
+                    surviving_statuses.append(s)
+            surviving_statuses.extend(state.get_statuses(side, pending=True))
+
             if side == BattleSide.ATTACKER:
-                state.attacker_active_effects = surviving
+                state.attacker_active_effects = surviving_effects
                 state.attacker_pending_effects = []
+                state.attacker_active_statuses = surviving_statuses
+                state.attacker_pending_statuses = []
             else:
-                state.defender_active_effects = surviving
+                state.defender_active_effects = surviving_effects
                 state.defender_pending_effects = []
+                state.defender_active_statuses = surviving_statuses
+                state.defender_pending_statuses = []
 
     def _snapshot(self, state: BattleState) -> BattleSnapshot:
         return BattleSnapshot(

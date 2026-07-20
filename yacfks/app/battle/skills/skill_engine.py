@@ -4,12 +4,12 @@ from typing import Callable
 from yacfks.app.battle.skills.effect_collection import EffectCollection
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope, StackRule
 from yacfks.app.battle.phase_context import PhaseContext
-from yacfks.app.battle.skills.statuses import ActiveEffect
-from yacfks.app.battle.skills.definitions import EffectSpec
+from yacfks.app.battle.skills.statuses import ActiveEffect, ActiveStatus
+from yacfks.app.battle.skills.definitions import EffectSpec, StatusSpec
 from yacfks.app.battle.skills.conditions import (
-    RandomChanceCondition, RequiresFriendlyTroopType, RequiresTargetTroopType,
+    RandomChanceCondition, RequiresFriendlyTroopType, RequiresTargetTroopType, RequiresMinTurn,
 )
-from yacfks.app.battle.skills.definitions import SkillDefinition, HeroSkillSelection, TroopSkillDefinition
+from yacfks.app.battle.skills.definitions import SkillDefinition, HeroSkillSelection, TroopSkillDefinition, SkillLevelData
 from yacfks.app.domains.enums import BattleSide, TroopType
 
 # ── Effect type classification ────────────────────────────────────────────────
@@ -78,43 +78,59 @@ class SkillEngine:
             return
         if not self._check_conditions(skill_def.conditions, context, rng_fn, level_entry):
             return
-        for spec in skill_def.effects:
-            self._apply_effect(spec, skill_def.id, level_entry, context, rng_fn)
+        # statuses before effects: _apply_effect resolves target_troop from status when required_status_id is set
+        for status_spec in skill_def.statuses:
+            self._apply_status(status_spec, skill_def.id, context)
+
+        # indexes skill effects and applies effects
+        # iteravley using the count as index. that way we can map an effect to an effect value 
+        # in level data,  while level data can stay flexible enough to allow different 
+        # effect_types and value increase pairs per skill level.
+        # Ordering matters though, since this is a positional lookup, 
+        # and requires skill level effect values to be defined in same order as effects, so be careful.
+        # might change to eg a tuple key or explicit effect ID field, so ordering doesnt matter, but for now this will do.
+        for i, spec in enumerate(skill_def.effects):
+            self._apply_effect(spec, i, skill_def.id, level_entry, context, rng_fn)
 
     def _apply_effect(
-            self, 
-            spec: EffectSpec, 
-            source_skill_id: int, 
-            level_entry, 
-            context: PhaseContext | None, 
-            rng_fn
+            self,
+            spec: EffectSpec,
+            effect_index: int,
+            source_skill_id: int,
+            level_entry: SkillLevelData,
+            context: PhaseContext | None,
+            rng_fn,
         ) -> None:
         
         if context is None or context.battle_state is None:
             return
 
         host_side = context.attacking_side
-        scope = spec.target_scope
-
-        if scope == TargetScope.CURRENT_TARGET:
-            target_troop = context.defender_troop_type
-        # RANDOM_ENEMY_LINE i.e. choosing a random enemy troop type, is just hypothetical, but cool to have when crafting some skills.
-        elif scope == TargetScope.RANDOM_ENEMY_LINE:
-            enemy_side = BattleSide.DEFENDER if host_side == BattleSide.ATTACKER else BattleSide.ATTACKER
-            live = [t for t in _TROOP_ORDER if context.battle_state.get_line(enemy_side, t).is_alive]
-            if not live:
-                return
-            target_troop = live[int(rng_fn() * len(live))]
-        else:
-            # None or ENEMY_ARMY → target_troop=None (applies to any enemy)
-            # specific scopes resolve to TroopType
-            target_troop = _SCOPE_TO_TROOP.get(scope) if scope is not None else None
-
-        value = level_entry.values.get(spec.effect_op)
-        if value is None:
-            return
-
         state = context.battle_state
+
+        # set targeting, either from a Status if required or from target_scope from EffectSpec.
+        if spec.required_status_id is not None:
+            # target_troop is inherited from the required status (e.g. Evil Eye copies from Cursed)
+            all_statuses = state.get_statuses(host_side) + state.get_statuses(host_side, pending=True)
+            matched = next((s for s in all_statuses if s.status_spec.id == spec.required_status_id), None)
+            target_troop = matched.target_troop if matched is not None else None
+        else:
+            scope = spec.target_scope
+            if scope == TargetScope.CURRENT_TARGET:
+                target_troop = context.defender_troop_type
+            # RANDOM_ENEMY_LINE i.e. choosing a random enemy troop type, is just hypothetical, but cool to have when crafting some skills.
+            elif scope == TargetScope.RANDOM_ENEMY_LINE:
+                enemy_side = BattleSide.DEFENDER if host_side == BattleSide.ATTACKER else BattleSide.ATTACKER
+                live = [t for t in _TROOP_ORDER if context.battle_state.get_line(enemy_side, t).is_alive]
+                if not live:
+                    return
+                target_troop = live[int(rng_fn() * len(live))]
+            else:
+                # None or ENEMY_ARMY → target_troop=None (applies to any enemy); specific scopes resolve to TroopType
+                target_troop = _SCOPE_TO_TROOP.get(scope) if scope is not None else None
+
+        value = level_entry.values[effect_index]
+
         all_existing_effects = state.get_effects(host_side) + state.get_effects(host_side, pending=True)
 
         # UNIQUE effects are globally singular: only one instance of a given (skill_id, effect_op)
@@ -151,7 +167,8 @@ class SkillEngine:
                 # stackable and refresh type?
                 # currently this implementation is just wierd...
                 # would need a way to track individual instances of same skill_id, so correct one is refreshed,
-                #  like a skill_instance_id or something.
+                #  like a skill_instance_id or something. 
+                # going  by a key tuple with like skill_id, troop target etc wont be enough to be disctinct.
                 # since REFRESH type is just hypothetical, might just drop this type..
                 existing.remaining_turns = spec.duration
                 return
@@ -198,12 +215,61 @@ class SkillEngine:
                     return False
                 if not context.battle_state.get_line(context.attacking_side, condition.troop_type).is_alive:
                     return False
+            elif isinstance(condition, RequiresMinTurn):
+                if context is None or context.battle_state is None:
+                    return False
+                if context.battle_state.turn < condition.min_turn:
+                    return False
         return True
+
+    def _apply_status(
+        self,
+        status_spec: StatusSpec,
+        source_skill_id: int,
+        context: PhaseContext | None,
+    ) -> None:
+        if context is None or context.battle_state is None:
+            return
+
+        host_side = context.attacking_side
+        state = context.battle_state
+
+        scope = status_spec.target_scope
+        # to handle dynamic retargeting like Ambuhser CAV skill
+        if scope == TargetScope.CURRENT_TARGET:
+            target_troop = context.defender_troop_type
+        else:
+            target_troop = _SCOPE_TO_TROOP.get(scope) if scope is not None else None
+
+        all_existing = state.get_statuses(host_side) + state.get_statuses(host_side, pending=True)
+
+        if status_spec.stack_rule == StackRule.UNIQUE:
+            already = next(
+                (s for s in all_existing
+                 if s.source_skill_id == source_skill_id and s.status_spec.id == status_spec.id),
+                None,
+            )
+            if already is not None:
+                return
+
+        new_status = ActiveStatus(
+            status_spec=status_spec,
+            remaining_turns=status_spec.duration,
+            source_skill_id=source_skill_id,
+            host_side=host_side,
+            target_troop=target_troop,
+        )
+        if status_spec.apply_delay == 0:
+            state.get_statuses(host_side).append(new_status)
+        else:
+            state.get_statuses(host_side, pending=True).append(new_status)
 
     def build_phase_ecs(
         self,
         att_active_effects: list[ActiveEffect],
         def_active_effects: list[ActiveEffect],
+        att_active_statuses: list[ActiveStatus],
+        def_active_statuses: list[ActiveStatus],
         att_troop_type: TroopType,
         target_troop_type: TroopType,
     ) -> tuple[EffectCollection, EffectCollection]:
@@ -222,24 +288,32 @@ class SkillEngine:
             owned by the phase defender → sourced from def_active_effects.
             target_troop filters which of the attacker's troop types must be attacking.
             benefactor_scope filters which of the owner's/SELF troop types must be under attack.
+
+        Effects with required_status_id are skipped unless that status is present in the
+        relevant side's active statuses (att_active_statuses for numerator, def_active_statuses
+        for denominator).
         """
-        #SkillMod numerator/denominator for a given side
-        # an EffectCollection can do Skillmod stacking logic
         numerator_ec = EffectCollection()
         denominator_ec = EffectCollection()
 
         # fetch all applicable numerator effects from phase attacker
         for ae in att_active_effects:
             spec = ae.effect_spec
+            if spec.required_status_id is not None:
+                if not any(s.status_spec.id == spec.required_status_id for s in att_active_statuses):
+                    continue
             benefactor_troop = _SCOPE_TO_TROOP.get(spec.benefactor_scope) if spec.benefactor_scope else None
             if spec.effect_type in _NUMERATOR_EFFECT_TYPES:
                 if ae.target_troop is None or ae.target_troop == target_troop_type:
                     if benefactor_troop is None or benefactor_troop == att_troop_type:
                         numerator_ec.add(spec.effect_type, spec.effect_op, ae.value)
 
-        # fetch all applicable denomiantor effects from phase defender
+        # fetch all applicable denominator effects from phase defender
         for ae in def_active_effects:
             spec = ae.effect_spec
+            if spec.required_status_id is not None:
+                if not any(s.status_spec.id == spec.required_status_id for s in def_active_statuses):
+                    continue
             benefactor_troop = _SCOPE_TO_TROOP.get(spec.benefactor_scope) if spec.benefactor_scope else None
             if spec.effect_type in _DENOMINATOR_EFFECT_TYPES:
                 if ae.target_troop is None or ae.target_troop == att_troop_type:
@@ -255,6 +329,7 @@ class SkillEngine:
         rng_fn: Callable[[], float] = _random.random,
     ) -> bool:
         """Returns True if a RETARGET troop skill rolls true.
+        It's really only for Ambusher CAV skill.
 
         Called during target pre-computation at beginning of turn, before any attack phases
         takes place.

@@ -25,7 +25,7 @@ _INF_MASTER_BRAWLER = TroopSkillDefinition(
     ],
     conditions=[],
     level_data={
-        1: SkillLevelData(skill_id=1301, level=1, values={301: 10.0})
+        1: SkillLevelData(skill_id=1301, level=1, values=[10.0])
     },
 )
 
@@ -45,7 +45,7 @@ _CAV_CHARGE = TroopSkillDefinition(
     ],
     conditions=[],
     level_data={
-        1: SkillLevelData(skill_id=2301, level=1, values={301: 10.0})
+        1: SkillLevelData(skill_id=2301, level=1, values=[10.0])
     },
 )
 
@@ -65,7 +65,7 @@ _ARCH_RANGED_STRIKE = TroopSkillDefinition(
     ],
     conditions=[],
     level_data={
-        1: SkillLevelData(skill_id=3301, level=1, values={301: 10.0})
+        1: SkillLevelData(skill_id=3301, level=1, values=[10.0])
     },
 )
 
@@ -88,7 +88,7 @@ _CAV_AMBUSHER= TroopSkillDefinition(
     # level data does nothing for this speical skill, but troop skills are so much like hero skills
     # that i really don't want to make an adhoc class for a few speical troop skills...
     level_data={
-        1: SkillLevelData(skill_id=20, level=1, values={0: 1.0})
+        1: SkillLevelData(skill_id=20, level=1, values=[1.0])
     },
 )
 

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Sequence
 from yacfks.app.battle.skills.enums import EffectType, TargetScope, StackRule, TriggerType
 from yacfks.app.battle.skills.conditions import SkillCondition
@@ -22,13 +22,30 @@ class EffectSpec:
     duration:         int = -1
     apply_delay:      int = 0
     stack_rule:       StackRule = StackRule.STACK
+    required_status_id: int | None = None  # if set, effect is gated on this status being active
+
+
+@dataclass(frozen=True)
+class StatusSpec:
+    """Blueprint for a named status a skill can place (e.g. Cursed, Terror).
+
+    Very similar to EffectSpec, but unlike EffectSpec, StatusSpec carries no numeric value.
+    It's a named marker/tag that gates/informs dependent effects via 
+    required_status_id on EffectSpec.
+    """
+    id:           int
+    name:         str
+    target_scope: TargetScope | None = None  # None = ENEMY_ARMY (any enemy)
+    duration:     int = 1
+    apply_delay:  int = 0
+    stack_rule:   StackRule = StackRule.UNIQUE
 
 
 @dataclass(frozen=True)
 class SkillLevelData:
     skill_id: int
     level: int
-    values: dict[int, float]
+    values: list[float]  # one value per effect in skill_def.effects, by position
     chance: float | None = None  # overrides RandomChanceCondition.chance when set
 
 
@@ -43,6 +60,19 @@ class SkillDefinition:
     effects: list[EffectSpec]
     conditions: Sequence[SkillCondition]
     level_data: dict[int, SkillLevelData] | None = None
+    statuses:   list[StatusSpec] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        # safeguard to make sure number of skill effects matches number of level data entries
+        if self.level_data is None:
+            return
+        n = len(self.effects)
+        for lvl, entry in self.level_data.items():
+            if len(entry.values) != n:
+                raise ValueError(
+                    f"Skill '{self.name}' (id={self.id}) level {lvl}: "
+                    f"values has {len(entry.values)} entries but skill has {n} effects"
+                )
 
 
 @dataclass(frozen=True)
