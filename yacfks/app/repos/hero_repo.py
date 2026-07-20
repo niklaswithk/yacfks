@@ -13,7 +13,7 @@ _amane_tri_phalanx = HeroSkillDefinition(
     name="Tri-Phalanx",
     trigger=TriggerType.STATIC,
     effects=[
-        EffectSpec(EffectType.DAMAGE_UP, 102, TargetScope.ENEMY_ARMY),
+        EffectSpec(EffectType.DAMAGE_UP, 102),
     ],
     conditions=[],
     level_data={
@@ -38,7 +38,7 @@ _chenko_stand_of_arms = HeroSkillDefinition(
     name="Stand of Arms",
     trigger=TriggerType.STATIC,
     effects=[
-        EffectSpec(EffectType.DAMAGE_UP, 101, TargetScope.ENEMY_ARMY),
+        EffectSpec(EffectType.DAMAGE_UP, 101),
     ],
     conditions=[],
     level_data={
@@ -63,8 +63,8 @@ _saul_taskforce_training = HeroSkillDefinition(
     name="Taskforce Training",
     trigger=TriggerType.STATIC,
     effects=[
-        EffectSpec(EffectType.DEFENSE_UP, 112, TargetScope.ENEMY_ARMY),
-        EffectSpec(EffectType.DEFENSE_UP, 113, TargetScope.ENEMY_ARMY),
+        EffectSpec(EffectType.DEFENSE_UP, 112),
+        EffectSpec(EffectType.DEFENSE_UP, 113),
     ],
     conditions=[],
     level_data={
@@ -89,8 +89,8 @@ _hilde_noble_path = HeroSkillDefinition(
     name="Noble Path",
     trigger=TriggerType.STATIC,
     effects=[
-        EffectSpec(EffectType.DAMAGE_UP,  102, TargetScope.ENEMY_ARMY),
-        EffectSpec(EffectType.DEFENSE_UP, 112, TargetScope.ENEMY_ARMY),
+        EffectSpec(EffectType.DAMAGE_UP, 102),
+        EffectSpec(EffectType.DEFENSE_UP, 112),
     ],
     conditions=[],
     level_data={
@@ -120,8 +120,8 @@ _thrud_ancestral_guidance = HeroSkillDefinition(
     name="Ancestral Guidance",
     trigger=TriggerType.STATIC,
     effects=[
-        EffectSpec(EffectType.DAMAGE_UP,     102, TargetScope.ENEMY_ARMY),
-        EffectSpec(EffectType.OPP_DAMAGE_DOWN, 201, TargetScope.ENEMY_ARMY),
+        EffectSpec(EffectType.DAMAGE_UP, 102),
+        EffectSpec(EffectType.OPP_DAMAGE_DOWN, 201),
     ],
     conditions=[],
     level_data={
@@ -161,7 +161,7 @@ _petra_evil_eye = HeroSkillDefinition(
     statuses=[
         StatusSpec(
             id=_CURSED_STATUS_ID, name="Cursed",
-            target_scope=TargetScope.CURRENT_TARGET,
+            target_scopes=(TargetScope.CURRENT_TARGET,),
             duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
         ),
     ],

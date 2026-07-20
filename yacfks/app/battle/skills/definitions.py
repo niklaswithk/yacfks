@@ -5,24 +5,40 @@ from yacfks.app.battle.skills.enums import EffectType, TargetScope, StackRule, T
 from yacfks.app.battle.skills.conditions import SkillCondition
 
 
+_DYNAMIC_SCOPES = frozenset([TargetScope.CURRENT_TARGET, TargetScope.RANDOM_ENEMY_LINE])
+
+
 @dataclass(frozen=True)
 class EffectSpec:
     """Effect descriptor for both hero and troop skills.
 
-    target_scope: ENEMY_* scope (or CURRENT_TARGET / RANDOM_ENEMY_LINE) — which enemy troop
-    type this effect targets.
+    target_scopes: tuple of ENEMY_* scopes (or CURRENT_TARGET / RANDOM_ENEMY_LINE) — which
+    enemy troop types this effect targets. None = any enemy (same as ENEMY_ARMY). A tuple
+    with two or more entries means the effect fires in phases where the target is ANY of them.
+    Dynamic scopes (CURRENT_TARGET, RANDOM_ENEMY_LINE) must be the sole entry in the tuple.
 
-    benefactor_scope: SELF_* scope (or None = all own troops) — which of the owner's troop
-    types benefits from the effect. Used by build_phase_ecs to filter per attack phase.
+    benefactor_scopes: tuple of SELF_* scopes (or None = all own troops) — which of the
+    owner's troop types benefit from the effect. Used by build_phase_ecs to filter per phase.
+    A tuple with two or more entries means the effect fires when the own attacker/defender
+    troop is ANY of the listed types.
     """
-    effect_type:      EffectType
-    effect_op:        int
-    target_scope:     TargetScope | None = None
-    benefactor_scope: TargetScope | None = None
-    duration:         int = -1
-    apply_delay:      int = 0
-    stack_rule:       StackRule = StackRule.STACK
-    required_status_id: int | None = None  # if set, effect is gated on this status being active
+    effect_type:        EffectType
+    effect_op:          int
+    target_scopes:      tuple[TargetScope, ...] | None = None
+    benefactor_scopes:  tuple[TargetScope, ...] | None = None
+    duration:           int = -1
+    apply_delay:        int = 0
+    stack_rule:         StackRule = StackRule.STACK
+    required_status_id: int | None = None
+
+    def __post_init__(self) -> None:
+        for field, scopes in (("target_scopes", self.target_scopes), ("benefactor_scopes", self.benefactor_scopes)):
+            if scopes is not None and len(scopes) > 1:
+                dynamic = [s for s in scopes if s in _DYNAMIC_SCOPES]
+                if dynamic:
+                    raise ValueError(
+                        f"EffectSpec.{field}: dynamic scope {dynamic[0]!r} cannot be combined with other scopes"
+                    )
 
 
 @dataclass(frozen=True)
@@ -30,15 +46,26 @@ class StatusSpec:
     """Blueprint for a named status a skill can place (e.g. Cursed, Terror).
 
     Very similar to EffectSpec, but unlike EffectSpec, StatusSpec carries no numeric value.
-    It's a named marker/tag that gates/informs dependent effects via 
+    It's a named marker/tag that gates/informs dependent effects via
     required_status_id on EffectSpec.
+
+    target_scopes: tuple of ENEMY_* scopes or dynamic scopes (CURRENT_TARGET is most common).
+    None = any enemy. Dynamic scopes must be the sole entry.
     """
-    id:           int
-    name:         str
-    target_scope: TargetScope | None = None  # None = ENEMY_ARMY (any enemy)
-    duration:     int = 1
-    apply_delay:  int = 0
-    stack_rule:   StackRule = StackRule.UNIQUE
+    id:            int
+    name:          str
+    target_scopes: tuple[TargetScope, ...] | None = None
+    duration:      int = 1
+    apply_delay:   int = 0
+    stack_rule:    StackRule = StackRule.UNIQUE
+
+    def __post_init__(self) -> None:
+        if self.target_scopes is not None and len(self.target_scopes) > 1:
+            dynamic = [s for s in self.target_scopes if s in _DYNAMIC_SCOPES]
+            if dynamic:
+                raise ValueError(
+                    f"StatusSpec.target_scopes: dynamic scope {dynamic[0]!r} cannot be combined with other scopes"
+                )
 
 
 @dataclass(frozen=True)

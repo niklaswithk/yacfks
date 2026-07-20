@@ -68,17 +68,27 @@ Battle engine fires trigger event
 SkillEngine.evaluate_skills(hero_skills, troop_skills, trigger, context)
   ├─ For each hero skill: _apply_skill(definition, level, ...)
   │    → check trigger + conditions + level data
-  │    → for each EffectSpec: _apply_effect → writes ActiveEffect to "skill host" side in BattleState
-  │         apply_delay=0 → host_side active effects   (effective this turn)
-  │         apply_delay>0 → host_side pending effects  (effective in a future turn)
+  │    → for each StatusSpec: _apply_status → writes ActiveStatus to host side in BattleState
+  │    → for each EffectSpec (enumerated): _apply_effect → writes ActiveEffect to "skill host" side in BattleState
+  │         apply_delay=0 → host_side active effects/statuses   (effective this turn)
+  │         apply_delay>0 → host_side pending effects/statuses  (effective in a future turn)
   │
   └─ For each troop skill: _apply_skill(definition, level=1, ...)
        → essentially same path as hero skills — writes ActiveEffect to owner/skill host side in BattleState
 
+Turn-start per-troop (TURN_START_PER_TROOP):
+  BattleEngine._apply_skills_per_troop() — called once per side, after targeting, before attack phases
+    → iterates each live troop type, passing its resolved target as PhaseContext.defender_troop_type
+    → needed for skills that use CURRENT_TARGET and must resolve it at turn start (e.g. Petra Evil Eye)
+
 Per attack phase:
-  SkillEngine.build_phase_ecs(att_active_effects, def_active_effects, att_troop_type, target_troop_type)
+  SkillEngine.build_phase_ecs(
+      att_active_effects, def_active_effects,
+      att_active_statuses, def_active_statuses,
+      att_troop_type, target_troop_type)
     → att_active_effects: current phase attacker's active effects → NUMERATOR types read here
     → def_active_effects: current phase defender's active effects → DENOMINATOR types read here
+    → att/def_active_statuses: gate effects that carry required_status_id
     → returns (numerator_ec, denominator_ec)
   SkillEngine.compute_skill_mod(numerator_ec, denominator_ec)
     → returns SkillMod float → battle engine feeds into compute_kills()
@@ -103,15 +113,23 @@ The skills engine iterates both sides' lists of effects and by way of `effect_ty
 ```python
 BattleState:
     attacker_active_effects:  list[ActiveEffect]   # Attacker skill effects currently active & contributing
-    attacker_pending_effects: list[ActiveEffect]   # Attacker pedning skill effects, i.e. skills/effects with a dealy, promoted in a futre turn
+    attacker_pending_effects: list[ActiveEffect]   # Attacker pending skill effects, i.e. skills/effects with a delay, promoted in a future turn
     defender_active_effects:  list[ActiveEffect]
     defender_pending_effects: list[ActiveEffect]
 
+    attacker_active_statuses:  list[ActiveStatus]  # Named status markers (e.g. Cursed)
+    attacker_pending_statuses: list[ActiveStatus]
+    defender_active_statuses:  list[ActiveStatus]
+    defender_pending_statuses: list[ActiveStatus]
+
     def get_effects(self, side: BattleSide, *, pending: bool = False) -> list[ActiveEffect]:
-        # returns the right list for the given side and active/pending flag
+        # returns the right effect list for the given side and active/pending flag
+
+    def get_statuses(self, side: BattleSide, *, pending: bool = False) -> list[ActiveStatus]:
+        # returns the right status list for the given side and active/pending flag
 ```
 
-`_tick_statuses` runs at end of each turn and decrements `remaining_turns` (from an effects' `duration`) on active effects (removing those that reach 0), then promotes `pending_effects → active_effects` according to `apply_delay`.
+`_tick_statuses` runs at end of each turn: decrements `remaining_turns` on active effects and active statuses (removing those that reach 0), then promotes `pending_effects → active_effects` and `pending_statuses → active_statuses`.
 
 ### EffectSpec
 
@@ -121,24 +139,30 @@ Both hero and troop skills use this, and the effects when placed appends a list 
 
 ```python
 EffectSpec:
-    effect_type:      EffectType          # DAMAGE_UP | DEFENSE_UP | TROOP_DAMAGE_UP | TROOP_DEFENSE_UP
-                                          # OPP_DEFENSE_DOWN | OPP_DAMAGE_DOWN
-                                          # RETARGET (CAV speical skill) | EXTRA_ATK_PHASE (future Volley arch special skill)
-    effect_op:        int                 # 101, 102, 201 etc etc
-    target_scope:     TargetScope         # for filtering, resolves to target_troop; controls which phase the effect fires in
-    benefactor_scope: TargetScope | None  # for filtering, restricts which own troop type benefits; None = all
-    duration:         int = -1            # turns active; -1 = permanent
-    apply_delay:      int = 0             # 0 = active this turn; N = active after N turns
-    stack_rule:       StackRule = STACK   # STACK | UNIQUE | REFRESH
+    effect_type:        EffectType                      # DAMAGE_UP | DEFENSE_UP | TROOP_DAMAGE_UP | TROOP_DEFENSE_UP
+                                                        # OPP_DEFENSE_DOWN | OPP_DAMAGE_DOWN
+                                                        # RETARGET (CAV special skill) | EXTRA_ATK_PHASE (future Volley)
+    effect_op:          int                             # 101, 102, 201 etc etc
+    target_scopes:      tuple[TargetScope, ...] | None  # None = any enemy; tuple of ENEMY_* types = effect fires when the
+                                                        # phase target is any of them. Dynamic scopes (CURRENT_TARGET,
+                                                        # RANDOM_ENEMY_LINE) must be 1 scope entry only.
+    benefactor_scopes:  tuple[TargetScope, ...] | None  # None = all own troops; tuple of SELF_* types = effect fires when the
+                                                        # own attacking/defending troop is any of them.
+    duration:           int = -1                        # turns active; -1 = permanent
+    apply_delay:        int = 0                         # 0 = active this turn; N = active after N turns
+    stack_rule:         StackRule = STACK               # STACK | UNIQUE | REFRESH
+    required_status_id: int | None = None               # if set, effect is gated on this named status being active on the
+                                                        # owner's side; target_troops is also inherited from that status
 ```
 
-`target_scope` evenutally resvoles to a concrete TroopType in `ActiveEffect` (it does not control which side stores the effect — effects are always stored on the owner's side aka the skill host), where it's used a filter to determine during which attack phase the effect will apply.
-This extra handling of `target_scope` is because an `EffectSpec` is frozen after it's instantiated while targeting can be dynamic with e.g. `CURRENT_TARGET`, so if one defines an effect with dynamic targeting it needs to resolve somewhere to an actual `TroopType`, and `ActiveEffect` is used for tracking such statefulness so that's where the resolved targeting  resides.
+`target_scopes` resolves at apply-time to a `frozenset[TroopType] | None` stored in `ActiveEffect.target_troops` (it does not control which side stores the effect — effects are always stored on the owner's side aka the skill host). The frozenset is used as a filter per attack phase: the phase target type must be `in` the set.  
+This extra handling is because an `EffectSpec` is frozen after instantiation while targeting can be dynamic with e.g. `CURRENT_TARGET`, so the actual resolved troop type value lives in `ActiveEffect`.
 
-`benefactor_scope` serves a similar purpose as a filter, but currently it can stay in `EffectSpec`.  
+`benefactor_scopes` works the same way but for the own attacking/defending troop type. Also resolves to a `frozenset` in `build_phase_ecs` for the filter check.
 
 `None` defaults to all i.e. any/all troop type vs any/all troop type.
 
+WIth these scopes an effect can go /apply into skillmod in a certain attack phase, i.e. INF vs INF or CAV vs ARCH etc.
 
 ### SkillLevelData
 
@@ -148,9 +172,17 @@ Numeric values for a skill at a specific level.
 SkillLevelData:
     skill_id: int
     level:    int
-    values:   dict[int, float]   # effect_op → percentage value (e.g. {102: 25.0} = op 102 is +25%)
-    chance:   float | None = None  # for skills where levels increase trigger chance. Overrides RandomChanceCondition.chance when set
+    values:   list[float]        # one value per effect, by position. 
+                                 # values[i] is the value for effects[i] in SkillDefinition.effects
+                                 # e.g. [25.0] for a 1-effect skill, [15.0, 10.0] for a 2-effect skill and so on. 
+                                 # Being poisitional lookup then ordering matters, 
+                                 # so make sure to define effects in same order as effect values per skill level.
+    chance:   float | None = None  # for skills where levels increase trigger chance.
+                                   #Overrides RandomChanceCondition.chance when set
 ```
+
+`values` is positional and order-dependent. Entry `i` maps to `SkillDefinition.effects[i]`. This allows two effects with the same `effect_op` (or different `effect_type`s) to carry different values at the same skill level.  
+`SkillDefinition.__post_init__` validates that `len(values) == len(effects)` for every level entry at definition time, so number of level entries match number of effects in a skill.
 
 ### ActiveEffect
 
@@ -158,16 +190,49 @@ A live effect instance tracked in `BattleState`. One `ActiveEffect` per `EffectS
 
 ```python
 ActiveEffect:
-    effect_spec:     EffectSpec          # The effect defintion, see `EffectSpec` above
-    remaining_turns: int                 # -1 = permanent
-    source_skill_id: int                 # which HeroSkillDefinition placed this
-    host_side:       BattleSide          # the side (Attacker/Defender) hosting this effect
-    target_troop:    TroopType | None    # resolved from target_scope in EffectSpec; None = any troop
-    value:           float               # resolved from level_data at apply-time
+    effect_spec:     EffectSpec                    # The effect definition, see `EffectSpec` above
+    remaining_turns: int                           # -1 = permanent
+    source_skill_id: int                           # which HeroSkillDefinition placed this
+    host_side:       BattleSide                    # the side (Attacker/Defender) hosting this effect
+    target_troops:   frozenset[TroopType] | None   # resolved from target_scopes at apply-time; None = any troop
+    value:           float                         # resolved from level_data at apply-time
 ```
 
-`target_troop` is the concrete `TroopType` value resolved from `EffectSpec.target_scope`, see EffectSpec above. That's so that eg `CURRENT_TARGET` in `EffectSpec` will resolve to an acutal `TroopType` when tracked as an `ActiveEffect` in `BattelState`.  
+`target_troops` is the `frozenset[TroopType]` resolved from `EffectSpec.target_scopes` at apply-time — so that `CURRENT_TARGET` and multi-troop scopes are locked in as concrete troop sets in `BattleState`. `None` means the effect applies regardless of target. `build_phase_ecs` checks `target_troop_type in ae.target_troops`.  
 Everything else about the effect can be accessed via `ActiveEffect.effect_spec`.
+
+### StatusSpec
+
+Blueprint for a named status "tag" that a skill can place (e.g. Cursed, Terror).  
+Unlike `EffectSpec`, `StatusSpec` carries no numeric value — it's a named tag. Its main role is to gate dependent effects: an `EffectSpec` with `required_status_id` only fires if an `ActiveStatus` with that id is present on the owner/host side.  
+The status also has a `target_troop` field, which the dependent effect inherits at apply-time when it becomes `ActiveEffect`.
+
+```python
+StatusSpec:
+    id:            int
+    name:          str
+    target_scopes: tuple[TargetScope, ...] | None  # same tuple semantics as EffectSpec.target_scopes;
+                                                   # CURRENT_TARGET is most common (locks in the cursed/tagged troop)
+    duration:      int = 1                         # turns active; almost always 1 (this turn only)
+    apply_delay:   int = 0                         # same semantics as EffectSpec.apply_delay
+    stack_rule:    StackRule = UNIQUE              # typically UNIQUE — one status per skill per turn
+```
+
+### ActiveStatus
+
+A live status instance tracked in `BattleState.get_statuses(side)`.  
+Mirrors `ActiveEffect` but carries no `value`.
+
+```python
+ActiveStatus:
+    status_spec:     StatusSpec
+    remaining_turns: int
+    source_skill_id: int
+    host_side:       BattleSide
+    target_troops:   frozenset[TroopType] | None  # resolved from status_spec.target_scopes at apply-time
+```
+
+`_tick_statuses` decrements `remaining_turns` on active statuses at turn end, removing those that reach 0, then promotes pending → active.
 
 ### SkillDefinition
 
@@ -185,6 +250,7 @@ HeroSkillDefinition:
     effects:    list[EffectSpec]
     conditions: list[SkillCondition]
     level_data: dict[int, SkillLevelData] | None
+    statuses:   list[StatusSpec] = []    # named status markers this skill places before its effects are applied
 ```
 
 ### TroopSkillDefinition
@@ -200,9 +266,12 @@ TroopSkillDefinition:
     effects:    list[EffectSpec]
     conditions: list[SkillCondition]
     level_data: dict[int, SkillLevelData] | None
+    statuses:   list[StatusSpec] = []
 ```
 
 **Deduplication** for troop skills happens at army composition time. `ArmyLine.troop_skills` is a property that collects skills from all `TroopStack`s in the `ArmyLine` and dedupes by `skill.id`. So with e.g. T6 INF and T10 INF both will carry the troop skill "Master Brawler" (same `id`), and the army line exposes only one instance. The skill engine never sees duplicates.
+
+Looking at TG8 troop skills, we're gonna need Status for some TG8 skills too.
 
 ---
 
@@ -232,6 +301,7 @@ All conditions are evaluated in sequence after the trigger fires. All must pass 
 RandomChanceCondition(chance: float)        # fires if rng_fn() < chance  (0.5 = 50%)
 RequiresTargetTroopType(troop_type)         # current attack target must be this troop type
 RequiresFriendlyTroopType(troop_type)       # own troops of this type must have >=1 alive
+RequiresMinTurn(min_turn: int)              # skill does not evaluate before battle_state.turn >= min_turn
 
 # Planned:
 RequiresTargetHasStatus(status_id: int)     # owner's active effects must contain an effect with the
@@ -247,15 +317,15 @@ Skills with no conditions always fire when their trigger fires.
 
 ## TargetScope
 
-`target_scope` on `EffectSpec` resolves to a `TroopType` value during runtime and stored in `ActiveEffect.target_troop` (so the dynamic `CURRENT_TARGET` works), and used as a per-attack phase filter in `build_phase_ecs`.  
-It does **not** determine which side hosts the effect — effects are always placed/hosted on the **skill owners side**.  
-`target_scope` should always be `ENEMY_*`-types (or `None` which will default to all enemy troops, same as `ENEMY_ARMY`)
+`target_scopes` on `EffectSpec` resolves at apply-time to a `frozenset[TroopType] | None` stored in `ActiveEffect.target_troops` (so dynamic scopes like `CURRENT_TARGET` lock in a concrete troop set). Used as a per-attack-phase filter in `build_phase_ecs`: the phase target type must be `in` the frozenset, or the frozenset is `None` (any).  
+Does **not** determine which side hosts the effect — effects are always placed/hosted on the **skill owner's side**.  
+`target_scopes` should contain `ENEMY_*` types, `CURRENT_TARGET`, or `RANDOM_ENEMY_LINE` (or `None` = any).
 
-`benefactor_scope` should always be `SELF_*`-types (or `None` which will default to all own troops, same as `SELF_ARMY`) and restricts which own troop type benefits.
+`benefactor_scopes` should contain `SELF_*` types (or `None` = all own troops). Restricts which of the owner's troop types benefit. Also resolves to a frozenset inside `build_phase_ecs`.
 
-These 2 different scopes helps the engine apply skill effects in the SkillMod only  for during certain attack phases, like CAV vs ARCH, or any vs any etc.
+A tuple with multiple entries means the effect fires when the phase troop is **any** of them — e.g. `(SELF_INFANTRY, SELF_ARCHERS)` gives INF and ARCH phases the benefit without affecting CAV. This is the multi-scope pattern that replaces what previously required duplicating effects.
 
-Might need seperate classes for `SELF_*` types and `ENEMY_*` types, for proper type enforcemetn.
+Might need separate classes for `SELF_*` types and `ENEMY_*` types for proper type enforcement.
 
 ```
 ENEMY_ARMY
@@ -293,13 +363,14 @@ A single `HeroSkillDefinition` can carry `EffectSpec`s with different scopes —
 Current implementation only suport 0 or 1 for values, since we don't track delays like we do remaining turns for `duration`. So apply_delay acts like a boolean currently, ie whether an effect go into either lists `*_active_effects` or `*_pending_effects` in BattleState.  
 Don't think there's more than 1-turn delay currently observed, but if there are then should be fixed to properly track turn delays..some day :)
 
-Maybe turn delays are a necessary side effect, if skills are rolled per attack phase and they want it to fairly benefit all troop types, so it's queued up for next turn if rolled true during say CAV attack phase, so it procs for all troop types during next turn...just a thought.
+Maybe turn delays are a necessary side effect, if skills are rolled per attack phase and they want it to fairly benefit all troop types, so it's queued up for turn N+1 if rolls true during say CAV attack phase in turn N, makgins sure it procs for all troop types during turn N and so all troop types can benefit from it...just a thought.
 
 ---
 
 ## Effect deduplication, for non-stackable skills
 
-When `_apply_effect` is about to place an `ActiveEffect`, it first searches both the active and pending lists for the owner/hosts' side for an existing effect. The key used depends on `stack_rule`:
+When `_apply_effect` is about to place an `ActiveEffect`, it first searches both the active and pending lists for the owner/hosts' side for an existing effect.  
+The key used depends on `stack_rule`:
 
 ```
 UNIQUE key:     (source_skill_id, effect_op)                      ← no target_troop
@@ -375,7 +446,7 @@ HeroSkillDefinition(
         EffectSpec(EffectType.DAMAGE_UP, 102, TargetScope.ENEMY_ARMY),
     ],
     conditions=[],
-    level_data={5: SkillLevelData(skill_id=1001, level=5, values={102: 25.0})},
+    level_data={5: SkillLevelData(skill_id=1001, level=5, values=[25.0])},
 )
 ```
 
@@ -398,7 +469,7 @@ HeroSkillDefinition(
         EffectSpec(EffectType.DEFENSE_UP, 112, TargetScope.ENEMY_ARMY),
     ],
     conditions=[],
-    level_data={5: SkillLevelData(skill_id=2002, level=5, values={102: 15.0, 112: 10.0})},
+    level_data={5: SkillLevelData(skill_id=2002, level=5, values=[15.0, 10.0])},
 )
 ```
 
@@ -406,27 +477,47 @@ Both effects are stored on the **owner's side** ie skill host.
 If ATTACKER is phase attacker:  
 `build_phase_ecs` reads `att_active_effects = attacker_active_effects` → finds `DAMAGE_UP op=102 +15%` → numerator. When DEFENDER attacks: `build_phase_ecs` reads `def_active_effects = attacker_active_effects` → finds `DEFENSE_UP op=112 +10%` → denominator. Hilde's defensive bonus reduces damage dealt *to her side*, not damage dealt *by* her side — the same list serves both directions.
 
-### Example 3 — RNG attack-phase debuff with delay (Petra — Evil Eye)
+### Example 3 — Status-gated per-troop RNG skill (Petra — Evil Eye)
 
-`PHASE` trigger, `RandomChanceCondition`, `apply_delay=1`, `UNIQUE`. The 1-turn delay means the boost does not apply in the same turn it is placed.
+`TURN_START_PER_TROOP` trigger, `RandomChanceCondition`, `RequiresMinTurn(2)`, `UNIQUE` on both status and effect. No delay — status and effect are both active the same turn they're placed.
 
 ```python
+_CURSED_ID = 1
+
 HeroSkillDefinition(
-    id=3001, name="Evil Eye", trigger=TriggerType.PHASE,
-    effects=[
-        EffectSpec(
-            EffectType.DAMAGE_UP, 102, TargetScope.CURRENT_TARGET,
-            duration=1, apply_delay=1, stack_rule=StackRule.UNIQUE,
+    id=3001, name="Evil Eye",
+    trigger=TriggerType.TURN_START_PER_TROOP,
+    statuses=[
+        StatusSpec(
+            id=_CURSED_ID, name="Cursed",
+            target_scope=TargetScope.CURRENT_TARGET,
+            duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
         ),
     ],
-    conditions=[RandomChanceCondition(chance=0.5)],
-    level_data={5: SkillLevelData(skill_id=3001, level=5, values={102: 50.0})},
+    effects=[
+        EffectSpec(
+            EffectType.DAMAGE_UP, 102,
+            required_status_id=_CURSED_ID,
+            duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
+        ),
+    ],
+    conditions=[RandomChanceCondition(chance=0.5), RequiresMinTurn(min_turn=2)],
+    level_data={5: SkillLevelData(skill_id=3001, level=5, values=[50.0])},
 )
 ```
 
-**Walkthrough:** Turn N, INF phase — RNG passes → `_apply_effect` resolves `CURRENT_TARGET → target_troop=INF` → writes `ActiveEffect` to `attacker_pending_effects` (`host_side=ATTACKER, target_troop=INF, value=50.0`). At turn end, `_tick_statuses` promotes it to `attacker_active_effects`. Turn N+1 — when ATTACKER attacks, `build_phase_ecs` reads `att_active_effects = attacker_active_effects`, finds this effect. `DAMAGE_UP` → numerator check: `target_troop=INF == target_type=INF` → `+50%` added. After turn N+1 ends, `remaining_turns` decrements 1 → 0 → removed.
+Turn 1 — the `RequiresMinTurn(2)` blocks all rolls for 1st turn. Turn 2 an above, at start of turn but AFTER targeting has been resolved: for each present own/SELF troop type (INF, CAV, ARCH) the engine calls `evaluate_skills` with a `PhaseContext` having all necessary info about resolved targets etc.  
+Lets say all you're BattlseSide.ATTACKER and SELF troop types targeting has resolved to ENEMY_INF (i.e. INF at BattleSide.DEFENDER), then flow for Evil Eye is for example:
 
-UNIQUE dedup key (no `target_troop`): `(3001, 102)`. A second proc in the same turn — from a CAV or ARCH phase, or a second Petra — searches `attacker_active_effects + attacker_pending_effects`, finds the pending instance by `(source_skill_id=3001, effect_op=102)`, and is discarded. The first proc's `target_troop` is locked in. Multiple Petras increase per-turn proc probability without stacking instances. Note that rolls and procs (actual placements) have independent counters — multiple rolls can succeed in one turn, but only 1 placement ever happens.
+- INF, roll passes (50%) --> `_apply_status` places `ActiveStatus(Cursed, target_troop=INF, duration=1)` in `attacker_active_statuses`. THen `_apply_effect` finds Cursed -> inherits `target_troop=INF` -> places `ActiveEffect(DAMAGE_UP 102, value=50.0, target_troop=INF, duration=1)` in `attacker_active_effects`.
+- CAV, roll fails (50%) --> nothing placed.
+- ARCH vs INF roll passes → UNIQUE dedup key `(3001, 102)` already exists from the INF roll --> so discarded. Same for Cursed: UNIQUE by `(3001, status_id=1)` --> discarded. So first proc wins! and locks in INF as the cursed target at enemy side.
+
+THen during the turns' attack phases: `build_phase_ecs` checks `att_active_statuses` for `status_id=1` — if present then DamageUp effect from Evil Eye is eligible.
+`target_troop=INF` filter means it only contributes when INF is the target.  
+Turn end: `_tick_statuses` decrements both Cursed and DamageUp `remaining_turns` to 0 --> both removed.
+
+Note that rolls and procs have independent counters, where multiple rolls can succeed, but only the first placement ever lands.
 
 ### Example 4 — Troop skills
 
@@ -445,7 +536,7 @@ TroopSkillDefinition(
         benefactor_scope=TargetScope.SELF_INFANTRY, duration=1,
     )],
     conditions=[],
-    level_data={1: SkillLevelData(skill_id=1301, level=1, values={301: 10.0})},
+    level_data={1: SkillLevelData(skill_id=1301, level=1, values=[10.0])},
 )
 ```
 
@@ -481,7 +572,7 @@ With `SELF_CAVALRY`, only your CAV attack phases pass the benefactor check in `b
 
 ### SkillEngine
 - `evaluate_skills(hero_skills, troop_skills, trigger, context)` — evaluates hero and troop skills for the given trigger; writes `ActiveEffect`s to the owners/hosts' side in `BattleState`
-- `build_phase_ecs(att_active_effects, def_active_effects, att_troop_type, target_troop_type)` — routes each `ActiveEffect` to SKillmod numerator or denominator EffectCollection for the current attack phase; returns `(numerator_ec, denominator_ec)`
+- `build_phase_ecs(att_active_effects, def_active_effects, att_active_statuses, def_active_statuses, att_troop_type, target_troop_type)` — routes each `ActiveEffect` to SkillMod numerator or denominator EffectCollection for the current attack phase; status lists gate effects with `required_status_id`; returns `(numerator_ec, denominator_ec)`
 - `collect_retarget(troop_skills, context)` — evaluates `TROOP_SPECIAL` / `RETARGET` troop skills; used by battle engine before attack phases to pre-compute CAV targeting.
 - `compute_skill_mod(numerator_ec, denominator_ec)` — returns SkillMod float
 

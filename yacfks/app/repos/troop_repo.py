@@ -18,8 +18,8 @@ _INF_MASTER_BRAWLER = TroopSkillDefinition(
         EffectSpec(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=301,
-            target_scope=TargetScope.ENEMY_CAVALRY,
-            benefactor_scope=TargetScope.SELF_INFANTRY,
+            target_scopes=(TargetScope.ENEMY_CAVALRY,),
+            benefactor_scopes=(TargetScope.SELF_INFANTRY,),
             duration=1,
         )
     ],
@@ -38,8 +38,8 @@ _CAV_CHARGE = TroopSkillDefinition(
         EffectSpec(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=301,
-            target_scope=TargetScope.ENEMY_ARCHERS,
-            benefactor_scope=TargetScope.SELF_CAVALRY,
+            target_scopes=(TargetScope.ENEMY_ARCHERS,),
+            benefactor_scopes=(TargetScope.SELF_CAVALRY,),
             duration=1,
         )
     ],
@@ -58,8 +58,8 @@ _ARCH_RANGED_STRIKE = TroopSkillDefinition(
         EffectSpec(
             effect_type=EffectType.TROOP_DAMAGE_UP,
             effect_op=301,
-            target_scope=TargetScope.ENEMY_INFANTRY,
-            benefactor_scope=TargetScope.SELF_ARCHERS,
+            target_scopes=(TargetScope.ENEMY_INFANTRY,),
+            benefactor_scopes=(TargetScope.SELF_ARCHERS,),
             duration=1,
         )
     ],
@@ -79,9 +79,6 @@ _CAV_AMBUSHER= TroopSkillDefinition(
         EffectSpec(
             effect_type=EffectType.RETARGET,
             effect_op=0,
-            target_scope=TargetScope.ENEMY_ARMY # contributes nothing here, speical skill.
-                                                # I should make target_scope optional and default to ENEMY_ARMY
-
         )
     ],
     conditions=[RandomChanceCondition(chance=0.20)],

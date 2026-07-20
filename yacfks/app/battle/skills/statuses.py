@@ -15,7 +15,7 @@ class ActiveStatus:
     remaining_turns: int
     source_skill_id: int
     host_side:       BattleSide
-    target_troop:    TroopType | None  # resolved from status_spec.target_scope at apply-time
+    target_troops:   frozenset[TroopType] | None  # resolved from status_spec.target_scopes at apply-time; None = any
 
 
 @dataclass
@@ -26,8 +26,8 @@ class ActiveEffect:
     remaining lifetime, and resolved numeric value.
     """
     effect_spec:     EffectSpec
-    remaining_turns: int                 # -1 = permanent
+    remaining_turns: int                          # -1 = permanent
     source_skill_id: int
     host_side:       BattleSide
-    target_troop:    TroopType | None    # None = all troop types on that side
-    value:           float               # resolved numeric value at apply-time
+    target_troops:   frozenset[TroopType] | None  # None = all troop types; resolved from target_scopes at apply-time
+    value:           float                        # resolved numeric value at apply-time
