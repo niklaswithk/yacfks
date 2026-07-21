@@ -43,7 +43,7 @@ _SCOPE_TO_TROOP: dict[TargetScope, TroopType] = {
 _TROOP_ORDER = [TroopType.INF, TroopType.CAV, TroopType.ARCH]
 
 
-def _scopes_to_troops(scopes: tuple | None) -> frozenset:
+def _scopes_to_troops(scopes: tuple | None) -> frozenset | None:
     """Resolve a tuple of TargetScopes to a frozenset of TroopTypes, or None for 'any'."""
     if scopes is None:
         return None
