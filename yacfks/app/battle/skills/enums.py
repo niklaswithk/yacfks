@@ -1,5 +1,8 @@
 from enum import Enum
 
+# trigger types are timing constructs, ie. when during a turn that a skill will be evaluated.
+# doesnt mean a skill will necessarliy trigger, since conditions are a thing too, and dependencies
+# on Statuse might gate procs etc.
 class TriggerType(Enum):
     # Static are skills like Tri-Phalanx etc, static modifiers that are actiavgted once per battle
     STATIC = "static"
@@ -9,6 +12,8 @@ class TriggerType(Enum):
     PHASE = "phase"
     # per-troop-type roll at turn start, after targeting — e.g. Petra Evil Eye
     TURN_START_PER_TROOP = "turn_start_per_troop"
+    # recurring skill that fires every N turns (turn % n == 0), e.g. Alcar, Sophia
+    EVERY_N_TURNS = "every_n_turns"
     # for speical troop skills ambusher and volley
     TROOP_SPECIAL = "troop_special"
     

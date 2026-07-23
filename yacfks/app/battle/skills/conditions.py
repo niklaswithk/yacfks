@@ -36,3 +36,14 @@ class RequiresMinTurn(SkillCondition):
     Use min_turn=2 for skills that skip turn 1 (e.g. Petra Evil Eye).
     """
     min_turn: int
+
+
+@dataclass(frozen=True)
+class EveryNTurnsCondition(SkillCondition):
+    """Skill fires only on turns that are exact multiples of n (turn % n == 0).
+
+    Pair with TriggerType.EVERY_N_TURNS.
+    Can stack with RequiresMinTurn eg EveryNTurnsCondition(n=2) + RequiresMinTurn(4) fires
+    on turns 4, 6, 8 etc
+    """
+    n: int

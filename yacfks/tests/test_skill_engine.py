@@ -3,7 +3,7 @@ from yacfks.app.battle.skills.skill_engine import SkillEngine
 from yacfks.app.battle.skills.effect_collection import EffectCollection
 from yacfks.app.battle.skills.enums import EffectType, TriggerType, TargetScope, StackRule
 from yacfks.app.battle.skills.definitions import EffectSpec, SkillLevelData, StatusSpec
-from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresMinTurn
+from yacfks.app.battle.skills.conditions import RandomChanceCondition, RequiresMinTurn, EveryNTurnsCondition
 from yacfks.app.battle.phase_context import PhaseContext
 from yacfks.app.battle.skills.statuses import ActiveEffect, ActiveStatus
 from yacfks.app.battle.battle_state import BattleState
@@ -504,6 +504,12 @@ class TestEvilEye:
     Skips turn 1 (RequiresMinTurn=2).
     """
 
+    # my prev interpreation of evil eye was that it was PHASE-based, ie
+    # rolled ebery time a troop type was about to attack, but no.
+    # had to implement a new trigger type "TURN_START_PER_TROOP"
+    # since it rolls at beginning of turn, before any attack phases occur,
+    # once for every present troop type, so up to 3 times.
+    # a small santity check here to make sure it doesnt trigger per attack phase
     def test_does_not_fire_at_phase_trigger(self):
         state = _state()
         state.turn = 2
@@ -512,6 +518,10 @@ class TestEvilEye:
         assert len(state.attacker_active_statuses) == 0
         assert len(state.attacker_active_effects) == 0
 
+    # apparently, eveil eye, and some other skills too maybe, practically skips
+    # turn 1, solved with a new COndition requreing a min number of turns before
+    # falling through and being applied. Flexible too, since one can decide how many turns
+    # must be skipped before a skill can be applied, but I think it mostly is about skipping turn 1 in practice.
     def test_does_not_fire_on_turn_1(self):
         state = _state()  # turn=1 by default
         SE.evaluate_skills([_evil_eye_skill()], [], TriggerType.TURN_START_PER_TROOP,
@@ -527,6 +537,9 @@ class TestEvilEye:
         assert len(state.attacker_active_statuses) == 0
         assert len(state.attacker_active_effects) == 0
 
+    # somehow i also had the intpertreatin that Evil Eye had a 1 turn delay, but apparently not.
+    # skill def changed to use 0 delay, so just making sure here it applies same-turn as firing.
+    # both ofr the curesed status and the damageup effect
     def test_proc_places_cursed_status_immediately(self):
         state = _state()
         state.turn = 2
@@ -547,6 +560,9 @@ class TestEvilEye:
         assert ae.value == 50.0
         assert ae.target_troops == frozenset({INF})  # resolved from Cursed status
 
+    # try for every troop type as target and ensure the active daamgeup effect targets that trrop type.
+    # implicitly works for Cursed to since the damageup effect is dependent on that status being applied,
+    # but we a better targeted test for that below
     @pytest.mark.parametrize("target", [INF, CAV, ARCH])
     def test_effect_target_troop_matches_current_target(self, target):
         state = _state()
@@ -555,6 +571,8 @@ class TestEvilEye:
                            _ctx(state=state, def_type=target), rng_fn=lambda: 0.0)
         assert state.attacker_active_effects[0].target_troops == frozenset({target})
 
+    # try evaluating evil eye twice in the same turn, both rolls true but should reutnr only 1 active effect
+    # since evil eye doesnt stack 
     def test_unique_blocks_second_proc_on_same_skill(self):
         state = _state()
         state.turn = 2
@@ -570,11 +588,15 @@ class TestEvilEye:
         state = _state()
         spec = EffectSpec(EffectType.DAMAGE_UP, 102, required_status_id=_CURSED_ID,
                           duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE)
+        # inject evil eye DamageUp "manually" in the battle state list of active effects for Attacker
         _inject(state, spec, ATT, value=50.0, target_troops=frozenset({INF}))
-        # no status in state — gate blocks
+        # no CUrsed Status in state — gate blocks, the +50% from damageUp effect must not apply 
+        # and instead the numerator will default to 1
         n_ec, _ = _phase_ecs(state, att_type=INF, target_type=INF)
         assert n_ec.resolve_multiplier(EffectType.DAMAGE_UP) == pytest.approx(1.0)
 
+    # similar to above but we also inject Cursed Status along with damageup effect dependent on Cursed.
+    # the +50 from damageUp must apply.
     def test_damage_up_present_when_cursed_is_active(self):
         state = _state()
         spec = EffectSpec(EffectType.DAMAGE_UP, 102, required_status_id=_CURSED_ID,
@@ -589,6 +611,8 @@ class TestEvilEye:
         n_ec, _ = _phase_ecs(state, att_type=INF, target_type=INF)
         assert n_ec.resolve_multiplier(EffectType.DAMAGE_UP) == pytest.approx(1.5)
 
+    #calc ful skillmod for phase attacker with active damaup from evil eye
+    # and no effect from phase defeder (dnominator defaults to 1, so effective skillmod must be 1.5)
     def test_full_proc_contributes_to_skill_mod(self):
         state = _state()
         state.turn = 2
@@ -713,3 +737,68 @@ class TestMultiEffectSkills:
         # enemy INF targets DEF's CAV → SELF_CAV effect (30%) applies
         _, d_ec = _phase_ecs(state, att_type=INF, target_type=CAV)
         assert d_ec.resolve_multiplier(EffectType.DEFENSE_UP) == pytest.approx(1.30)
+
+
+# ── Every-N-turns skills ──────────────────────────────────────────────────────
+
+def _every_n_skill(n: int, extra_conditions: list | None = None) -> HeroSkillDefinition:
+    return HeroSkillDefinition(
+        id=7001, name=f"Every-{n}",
+        trigger=TriggerType.EVERY_N_TURNS,
+        effects=[_DUP_101],
+        conditions=[EveryNTurnsCondition(n=n)] + (extra_conditions or []),
+        level_data={1: SkillLevelData(skill_id=7001, level=1, values=[20.0])},
+    )
+
+
+class TestEveryNTurnsSkills:
+
+    # basic test for every N turn evals, trying for different intervals at different turn numbers,
+    # mksing sure a skill fires as expected.
+    @pytest.mark.parametrize("turn,n,fires", [
+        (2, 2, True),
+        (4, 2, True),
+        (1, 2, False),
+        (3, 2, False),
+        (4, 4, True),
+        (3, 4, False),
+        (5, 5, True),
+        (3, 3, True),
+    ])
+    def test_fires_only_on_multiples_of_n(self, turn, n, fires):
+        state = _state()
+        state.turn = turn
+        SE.evaluate_skills([_sel(_every_n_skill(n))], [], TriggerType.EVERY_N_TURNS, _ctx(state=state))
+        assert len(state.attacker_active_effects) == (1 if fires else 0)
+
+    # EVERY_N_TURNS trigger type is sort of superfluous, turned out to be as simple as just hadnling a new condition.
+    # timing-wise, EVERY_N_TURNS behaves same as TURN_START.
+    # but for now, ill leave EVERY_N_TURNS as it is, feels more explicit.
+    # testing here just to make sure EVERY_N_TURNS skills are not triggerd when evaluating TURN_START skills.
+    def test_does_not_fire_at_turn_start_trigger(self):
+        state = _state()
+        state.turn = 2
+        SE.evaluate_skills([_sel(_every_n_skill(2))], [], TriggerType.TURN_START, _ctx(state=state))
+        assert len(state.attacker_active_effects) == 0
+
+    # was worried that EVERY_N_TURNS or rather the condition "EveryNTurnsCondition" might behave wierd togehter with RequiresMinTurn e.g. skip 1 turn.
+    # but seems to work just fine  without much plumbing, it's stil as simple as all conditions need to pass,
+    # but the RequiresMinTurn needs to be of higher priory than every n turns, so skills engine checks for that condition first.
+    # should metion this in documentation.
+    # or maybe one could merge the condtinos into one class hosting both fields, like a "periodic timing" condition class..?
+    def test_stacks_with_requires_min_turn(self):
+        # n=2 + min_turn=4: fires on turns 4, 6, 8 — not on turn 2
+        state = _state()
+        state.turn = 2
+        skill = _every_n_skill(2, extra_conditions=[RequiresMinTurn(min_turn=4)])
+        SE.evaluate_skills([_sel(skill)], [], TriggerType.EVERY_N_TURNS, _ctx(state=state))
+        assert len(state.attacker_active_effects) == 0
+
+    # same as above but in a turn where both cinditions pass, making sure the skill effect
+    # goes into active effects.
+    def test_stacks_with_requires_min_turn_fires_when_both_pass(self):
+        state = _state()
+        state.turn = 4
+        skill = _every_n_skill(2, extra_conditions=[RequiresMinTurn(min_turn=4)])
+        SE.evaluate_skills([_sel(skill)], [], TriggerType.EVERY_N_TURNS, _ctx(state=state))
+        assert len(state.attacker_active_effects) == 1

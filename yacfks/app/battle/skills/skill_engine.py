@@ -8,6 +8,7 @@ from yacfks.app.battle.skills.statuses import ActiveEffect, ActiveStatus
 from yacfks.app.battle.skills.definitions import EffectSpec, StatusSpec
 from yacfks.app.battle.skills.conditions import (
     RandomChanceCondition, RequiresFriendlyTroopType, RequiresTargetTroopType, RequiresMinTurn,
+    EveryNTurnsCondition,
 )
 from yacfks.app.battle.skills.definitions import SkillDefinition, HeroSkillSelection, TroopSkillDefinition, SkillLevelData
 from yacfks.app.domains.enums import BattleSide, TroopType
@@ -229,6 +230,11 @@ class SkillEngine:
                 if context is None or context.battle_state is None:
                     return False
                 if context.battle_state.turn < condition.min_turn:
+                    return False
+            elif isinstance(condition, EveryNTurnsCondition):
+                if context is None or context.battle_state is None:
+                    return False
+                if context.battle_state.turn % condition.n != 0:
                     return False
         return True
 
