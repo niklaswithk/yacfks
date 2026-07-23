@@ -59,28 +59,34 @@ class BattleEngine:
     # ── turn execution ────────────────────────────────────────────────────────
 
     def _run_turn(self, context: BattleContext, state: BattleState) -> None:
-        # TURN_START are per turn skills, fires once per turn for both sides.
+        # resolve target for both sides first, before we eval any skills (except Ambusher) and before any attack phases.
+        # the special Ambusher (CAV RETARGET) rolls in _compute_side_targets, so not per phase.
+        # evaluating and resolving targets once per beginning of turn, and locking them in, could have
+        # some consequences for dynamic targeting skills using eg CURRENT_TARGET, if they roll per atack phase.
+        # but ill lieave like this for now
+        att_targets = self._compute_side_targets(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
+        def_targets = self._compute_side_targets(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
+
+        # TURN_START: per turn skills, fires once per turn for both sides.
         # hero and regular troop skills write duration=1 active effects that expire 
         # at turn end and are re-applied next turn.
         self._apply_skills(TriggerType.TURN_START, context, state)
+        # EVERY_N_TURNS: reurring/fixed interval skills (e.g. Alcar, Sophia) — EveryNTurnsCondition filters by turn % n.
+        # the trigger type here is a bit superflous, since the condition is what actually handles things while the trigger type
+        # behaves just like TURN_START...
+        # but ima leave it here for now, its more explcicit.
+        # but gonan have to think about how we can merge/simplify the trigger type and the condition, maybe
+        # a single condition class handling both min_turn and turn internval..?
+        self._apply_skills(TriggerType.EVERY_N_TURNS, context, state)
 
-        # Evaluate targeting for each side before their repsective attack phases run.
-        # the special Ambusher (CAV RETARGET) rolls in _compute_side_targets, so not per phase.
-        # MAAYBE targeting for both attacker and defender runs first as a set, before any sides' attack phases at all.
-        # but for now ill leave it like this, don't think there would be much difference..?
-        # also, evaluating and resolving targets once per beginning of turn, and locking them in, could have
-        # profound effects on skills like Petra Evil Eye, which is dynamic in nature with CURRENT_TARGET.
-        # i.e. when and where is CURRENT_TARGET resolvoed, and if/when  can it be re-evaled for CAV with Ambusher?
-        # For now ill do it like this, but might have to change it later so targeting is done per attack phase
-        att_targets = self._compute_side_targets(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
-        # collect and evaluate skills that runs at start of per turn but per present troop type
+        # TURN_START_PER_TROOP: for skills that are evaluated, rolled, etc, at start of turn but for every troop type present.
+        # sort of like per attack phase skills, but clustered in start of turn, before attack phases.
+        # because of dynamic targeting like CURRENT_TARGET, we pass the resolved targeting map per side
         self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.ATTACKER, att_targets)
-        # _run_attack_phases also collects and evaluates skills that trigger per attack phase, which is SORT of like
-        # TURN_START_PER_TROOP but not really.
-        self._run_attack_phases(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER, att_targets)
-
-        def_targets = self._compute_side_targets(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
         self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.DEFENDER, def_targets)
+
+        # the actual damage exhange, Attacker goes first - might not be how it's done in-game, but that's how i do it.
+        self._run_attack_phases(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER, att_targets)
         self._run_attack_phases(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER, def_targets)
 
         self._apply_losses(state)
