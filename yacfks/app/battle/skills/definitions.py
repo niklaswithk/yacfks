@@ -5,17 +5,17 @@ from yacfks.app.battle.skills.enums import EffectType, TargetScope, StackRule, T
 from yacfks.app.battle.skills.conditions import SkillCondition
 
 
-_DYNAMIC_SCOPES = frozenset([TargetScope.CURRENT_TARGET, TargetScope.RANDOM_ENEMY_LINE])
+_DYNAMIC_SCOPES = frozenset([TargetScope.PHASE_TARGET, TargetScope.RANDOM_ENEMY_LINE])
 
 
 @dataclass(frozen=True)
 class EffectSpec:
     """Effect descriptor for both hero and troop skills.
 
-    target_scopes: tuple of ENEMY_* scopes (or CURRENT_TARGET / RANDOM_ENEMY_LINE) — which
+    target_scopes: tuple of ENEMY_* scopes (or PHASE_TARGET / RANDOM_ENEMY_LINE) — which
     enemy troop types this effect targets. None = any enemy (same as ENEMY_ARMY). A tuple
     with two or more entries means the effect fires in phases where the target is ANY of them.
-    Dynamic scopes (CURRENT_TARGET, RANDOM_ENEMY_LINE) must be the sole entry in the tuple.
+    Dynamic scopes (PHASE_TARGET, RANDOM_ENEMY_LINE) must be the sole entry in the tuple.
 
     benefactor_scopes: tuple of SELF_* scopes (or None = all own troops) — which of the
     owner's troop types benefit from the effect. Used by build_phase_ecs to filter per phase.
@@ -49,7 +49,7 @@ class StatusSpec:
     It's a named marker/tag that gates/informs dependent effects via
     required_status_id on EffectSpec.
 
-    target_scopes: tuple of ENEMY_* scopes or dynamic scopes (CURRENT_TARGET is most common).
+    target_scopes: tuple of ENEMY_* scopes or dynamic scopes (PHASE_TARGET is most common).
     None = any enemy. Dynamic scopes must be the sole entry.
     """
     id:            int

@@ -127,7 +127,7 @@ class SkillEngine:
             scopes = spec.target_scopes
             if scopes is None:
                 target_troops = None
-            elif scopes[0] == TargetScope.CURRENT_TARGET:
+            elif scopes[0] == TargetScope.PHASE_TARGET:
                 t = context.defender_troop_type
                 target_troops = frozenset({t}) if t is not None else None
             # RANDOM_ENEMY_LINE: choosing a random live enemy troop type.
@@ -254,7 +254,7 @@ class SkillEngine:
         target_troops: frozenset | None
         if scopes is None:
             target_troops = None
-        elif scopes[0] == TargetScope.CURRENT_TARGET:
+        elif scopes[0] == TargetScope.PHASE_TARGET:
             t = context.defender_troop_type
             target_troops = frozenset({t}) if t is not None else None
         else:

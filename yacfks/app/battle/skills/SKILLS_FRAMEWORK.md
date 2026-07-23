@@ -79,7 +79,7 @@ SkillEngine.evaluate_skills(hero_skills, troop_skills, trigger, context)
 Turn-start per-troop (TURN_START_PER_TROOP):
   BattleEngine._apply_skills_per_troop() — called once per side, after targeting, before attack phases
     → iterates each live troop type, passing its resolved target as PhaseContext.defender_troop_type
-    → needed for skills that use CURRENT_TARGET and must resolve it at turn start (e.g. Petra Evil Eye)
+    → needed for skills that use PHASE_TARGET and must resolve it at turn start (e.g. Petra Evil Eye)
 
 Per attack phase:
   SkillEngine.build_phase_ecs(
@@ -144,7 +144,7 @@ EffectSpec:
                                                         # RETARGET (CAV special skill) | EXTRA_ATK_PHASE (future Volley)
     effect_op:          int                             # 101, 102, 201 etc etc
     target_scopes:      tuple[TargetScope, ...] | None  # None = any enemy; tuple of ENEMY_* types = effect fires when the
-                                                        # phase target is any of them. Dynamic scopes (CURRENT_TARGET,
+                                                        # phase target is any of them. Dynamic scopes (PHASE_TARGET,
                                                         # RANDOM_ENEMY_LINE) must be 1 scope entry only.
     benefactor_scopes:  tuple[TargetScope, ...] | None  # None = all own troops; tuple of SELF_* types = effect fires when the
                                                         # own attacking/defending troop is any of them.
@@ -156,7 +156,7 @@ EffectSpec:
 ```
 
 `target_scopes` resolves at apply-time to a `frozenset[TroopType] | None` stored in `ActiveEffect.target_troops` (it does not control which side stores the effect — effects are always stored on the owner's side aka the skill host). The frozenset is used as a filter per attack phase: the phase target type must be `in` the set.  
-This extra handling is because an `EffectSpec` is frozen after instantiation while targeting can be dynamic with e.g. `CURRENT_TARGET`, so the actual resolved troop type value lives in `ActiveEffect`.
+This extra handling is because an `EffectSpec` is frozen after instantiation while targeting can be dynamic with e.g. `PHASE_TARGET`, so the actual resolved troop type value lives in `ActiveEffect`.
 
 `benefactor_scopes` works the same way but for the own attacking/defending troop type. Also resolves to a `frozenset` in `build_phase_ecs` for the filter check.
 
@@ -198,7 +198,7 @@ ActiveEffect:
     value:           float                         # resolved from level_data at apply-time
 ```
 
-`target_troops` is the `frozenset[TroopType]` resolved from `EffectSpec.target_scopes` at apply-time — so that `CURRENT_TARGET` and multi-troop scopes are locked in as concrete troop sets in `BattleState`. `None` means the effect applies regardless of target. `build_phase_ecs` checks `target_troop_type in ae.target_troops`.  
+`target_troops` is the `frozenset[TroopType]` resolved from `EffectSpec.target_scopes` at apply-time — so that `PHASE_TARGET` and multi-troop scopes are locked in as concrete troop sets in `BattleState`. `None` means the effect applies regardless of target. `build_phase_ecs` checks `target_troop_type in ae.target_troops`.  
 Everything else about the effect can be accessed via `ActiveEffect.effect_spec`.
 
 ### StatusSpec
@@ -212,7 +212,7 @@ StatusSpec:
     id:            int
     name:          str
     target_scopes: tuple[TargetScope, ...] | None  # same tuple semantics as EffectSpec.target_scopes;
-                                                   # CURRENT_TARGET is most common (locks in the cursed/tagged troop)
+                                                   # PHASE_TARGET is most common (locks in the cursed/tagged troop)
     duration:      int = 1                         # turns active; almost always 1 (this turn only)
     apply_delay:   int = 0                         # same semantics as EffectSpec.apply_delay
     stack_rule:    StackRule = UNIQUE              # typically UNIQUE — one status per skill per turn
@@ -317,9 +317,9 @@ Skills with no conditions always fire when their trigger fires.
 
 ## TargetScope
 
-`target_scopes` on `EffectSpec` resolves at apply-time to a `frozenset[TroopType] | None` stored in `ActiveEffect.target_troops` (so dynamic scopes like `CURRENT_TARGET` lock in a concrete troop set). Used as a per-attack-phase filter in `build_phase_ecs`: the phase target type must be `in` the frozenset, or the frozenset is `None` (any).  
+`target_scopes` on `EffectSpec` resolves at apply-time to a `frozenset[TroopType] | None` stored in `ActiveEffect.target_troops` (so dynamic scopes like `PHASE_TARGET` lock in a concrete troop set). Used as a per-attack-phase filter in `build_phase_ecs`: the phase target type must be `in` the frozenset, or the frozenset is `None` (any).  
 Does **not** determine which side hosts the effect — effects are always placed/hosted on the **skill owner's side**.  
-`target_scopes` should contain `ENEMY_*` types, `CURRENT_TARGET`, or `RANDOM_ENEMY_LINE` (or `None` = any).
+`target_scopes` should contain `ENEMY_*` types, `PHASE_TARGET`, or `RANDOM_ENEMY_LINE` (or `None` = any).
 
 `benefactor_scopes` should contain `SELF_*` types (or `None` = all own troops). Restricts which of the owner's troop types benefit. Also resolves to a frozenset inside `build_phase_ecs`.
 
@@ -334,7 +334,7 @@ ENEMY_ARMY
 ENEMY_INFANTRY, ENEMY_CAVALRY, ENEMY_ARCHERS
   → target_troop = INF / CAV / ARCH (effect applies only when that enemy type is involved)
 
-CURRENT_TARGET
+PHASE_TARGET
   → resolves at apply-time to the concrete enemy type currently being attacked;
     locked into target_troop on the ActiveEffect
 
@@ -490,7 +490,7 @@ HeroSkillDefinition(
     statuses=[
         StatusSpec(
             id=_CURSED_ID, name="Cursed",
-            target_scope=TargetScope.CURRENT_TARGET,
+            target_scope=TargetScope.PHASE_TARGET,
             duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
         ),
     ],
@@ -554,7 +554,7 @@ HeroSkillDefinition(
     id=9099, name="...", trigger=TriggerType.PHASE,
     effects=[
         EffectSpec(
-            EffectType.DAMAGE_UP, 101, TargetScope.CURRENT_TARGET,
+            EffectType.DAMAGE_UP, 101, TargetScope.PHASE_TARGET,
             benefactor_scope=TargetScope.SELF_CAVALRY,
             duration=1, apply_delay=1, stack_rule=StackRule.UNIQUE,
         ),
@@ -564,7 +564,7 @@ HeroSkillDefinition(
 ```
 
 Without `benefactor_scope`, all own troop types benefit ie same as `SELF_ARMY`.  
-With `SELF_CAVALRY`, only your CAV attack phases pass the benefactor check in `build_phase_ecs`, meaning the DamageUp will only be applied in your SkillMod numerator when your CAV attacks an enemy troop type (and with `TargetScope.CURRENT_TARGET` the target_troop type would be dynamic, meaning it might not be according to default targeting order since it's decided at runtime).
+With `SELF_CAVALRY`, only your CAV attack phases pass the benefactor check in `build_phase_ecs`, meaning the DamageUp will only be applied in your SkillMod numerator when your CAV attacks an enemy troop type (and with `TargetScope.PHASE_TARGET` the target_troop type would be dynamic, meaning it might not be according to default targeting order since it's decided at runtime).
 
 ---
 

@@ -146,7 +146,7 @@ def thrud_joiner(skill_level: int = 5) -> HeroSelection:
 # ── Petra ─────────────────────────────────────────────────────────────────────
 # Evil Eye: fires at TURN_START_PER_TROOP (once per live troop type, after targeting).
 # 50% chance per troop roll. Skips turn 1 (RequiresMinTurn=2).
-# On proc: places Cursed on CURRENT_TARGET (duration=1, UNIQUE, apply_delay=0 → active same turn).
+# On proc: places Cursed on PHASE_TARGET (duration=1, UNIQUE, apply_delay=0 → active same turn).
 # DamageUp is gated by Cursed (required_status_id) and resolves target_troop from that status,
 # so the +50% applies to the exact enemy troop type that was cursed this turn.
 
@@ -161,7 +161,7 @@ _petra_evil_eye = HeroSkillDefinition(
     statuses=[
         StatusSpec(
             id=_CURSED_STATUS_ID, name="Cursed",
-            target_scopes=(TargetScope.CURRENT_TARGET,),
+            target_scopes=(TargetScope.PHASE_TARGET,),
             duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
         ),
     ],

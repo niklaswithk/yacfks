@@ -56,7 +56,7 @@ class TargetScope(Enum):
     ENEMY_ARCHERS       = "enemy_archers"
 
     # dynamic targeting
-    CURRENT_TARGET      = "current_target"       # whichever enemy line is currently targeted
+    PHASE_TARGET        = "phase_target"          # whichever enemy line is targeted in the current attack phase
     RANDOM_ENEMY_LINE   = "random_enemy_line"    # randomly selected enemy troop type, prob doesnt appear in-game, but i'll leave it here if one ewants to try it out
 
 

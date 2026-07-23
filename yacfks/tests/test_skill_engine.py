@@ -480,7 +480,7 @@ def _evil_eye_skill(chance: float = 1.0) -> HeroSkillSelection:
         trigger=TriggerType.TURN_START_PER_TROOP,
         statuses=[StatusSpec(
             id=_CURSED_ID, name="Cursed",
-            target_scopes=(TargetScope.CURRENT_TARGET,),
+            target_scopes=(TargetScope.PHASE_TARGET,),
             duration=1, apply_delay=0, stack_rule=StackRule.UNIQUE,
         )],
         effects=[EffectSpec(
@@ -498,7 +498,7 @@ class TestEvilEye:
     """
     TURN_START_PER_TROOP skill — Petra's Evil Eye pattern.
 
-    On proc: places Cursed status (CURRENT_TARGET, duration=1, UNIQUE) immediately.
+    On proc: places Cursed status (PHASE_TARGET, duration=1, UNIQUE) immediately.
     DamageUp effect is gated by Cursed (required_status_id) and resolves target_troop
     from the Cursed status. Both are apply_delay=0, so they are active the same turn.
     Skips turn 1 (RequiresMinTurn=2).

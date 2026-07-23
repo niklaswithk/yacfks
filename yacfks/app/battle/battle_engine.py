@@ -62,7 +62,7 @@ class BattleEngine:
         # resolve target for both sides first, before we eval any skills (except Ambusher) and before any attack phases.
         # the special Ambusher (CAV RETARGET) rolls in _compute_side_targets, so not per phase.
         # evaluating and resolving targets once per beginning of turn, and locking them in, could have
-        # some consequences for dynamic targeting skills using eg CURRENT_TARGET, if they roll per atack phase.
+        # some consequences for dynamic targeting skills using eg PHASE_TARGET, if they roll per atack phase.
         # but ill lieave like this for now
         att_targets = self._compute_side_targets(context, state, BattleSide.ATTACKER, BattleSide.DEFENDER)
         def_targets = self._compute_side_targets(context, state, BattleSide.DEFENDER, BattleSide.ATTACKER)
@@ -81,7 +81,7 @@ class BattleEngine:
 
         # TURN_START_PER_TROOP: for skills that are evaluated, rolled, etc, at start of turn but for every troop type present.
         # sort of like per attack phase skills, but clustered in start of turn, before attack phases.
-        # because of dynamic targeting like CURRENT_TARGET, we pass the resolved targeting map per side
+        # because of dynamic targeting like PHASE_TARGET, we pass the resolved targeting map per side
         self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.ATTACKER, att_targets)
         self._apply_skills_per_troop(TriggerType.TURN_START_PER_TROOP, context, state, BattleSide.DEFENDER, def_targets)
 
